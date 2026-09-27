@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>USF 抽帧导出</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #232323; color: #d4d4d4;
+    font: 12px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 10px; user-select: none;
+  }
+  h1 { font-size: 14px; color: #fff; margin-bottom: 2px; }
+  .sub { color: #8a8a8a; font-size: 11px; margin-bottom: 10px; }
+  .card {
+    background: #2b2b2b; border: 1px solid #3d3d3d; border-radius: 6px;
+    padding: 10px; margin-bottom: 10px;
+  }
+  .kv { display: flex; justify-content: space-between; padding: 2px 0; }
+  .kv .k { color: #8a8a8a; }
+  .kv .v { color: #e8e8e8; text-align: right; word-break: break-all; }
+  .bar-wrap {
+    background: #1a1a1a; border-radius: 4px; height: 14px;
+    overflow: hidden; margin: 6px 0;
+  }
+  .bar { background: #2d8cf0; height: 100%; width: 0%; transition: width .15s; }
+  .ptext { text-align: center; font-size: 11px; color: #b0b0b0; }
+  button {
+    background: #3a3a3a; color: #e0e0e0; border: 1px solid #555;
+    border-radius: 4px; padding: 7px 10px; cursor: pointer;
+    font: inherit; width: 100%; margin-top: 6px;
+  }
+  button:hover { background: #474747; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #2d6dcc; border-color: #3b7ddd; color: #fff; }
+  button.primary:hover { background: #3b7ddd; }
+  button.danger { background: #6c2b2b; border-color: #8a3535; }
+  .row2 { display: flex; gap: 6px; }
+  .row2 button { margin-top: 6px; }
+  #log {
+    background: #1a1a1a; border-radius: 6px; padding: 8px;
+    height: 120px; overflow-y: auto; font: 11px/1.5 Consolas, monospace;
+    color: #9a9a9a; user-select: text; white-space: pre-wrap;
+  }
+  .state-ok { color: #4caf50; }
+  .state-err { color: #ef5350; }
+</style>
+</head>
+<body>
+  <h1>USF 抽帧导出</h1>
+  <div class="sub">Universal Scene Forge · Premiere Pro 时间线批量导帧</div>
+
+  <div class="card">
+    <div class="kv"><span class="k">任务状态</span><span class="v" id="taskState">未载入任务</span></div>
+    <div class="kv"><span class="k">视频数量</span><span class="v" id="tVideos">-</span></div>
+    <div class="kv"><span class="k">抽帧帧率</span><span class="v" id="tFps">-</span></div>
+    <div class="kv"><span class="k">抽帧上限</span><span class="v" id="tMax">-</span></div>
+    <div class="kv"><span class="k">导出格式</span><span class="v" id="tFmt">-</span></div>
+    <div class="kv"><span class="k">输出目录</span><span class="v" id="tOut">-</span></div>
+  </div>
+
+  <div class="card">
+    <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+    <div class="ptext" id="ptext">等待开始</div>
+  </div>
+
+  <button class="primary" id="btnAll">① 自动导入并导出全部视频</button>
+  <button id="btnCur">② 仅导出当前序列（可先手动剪辑）</button>
+  <button id="btnReload">重新载入任务</button>
+  <div class="row2">
+    <button class="danger" id="btnStop">停止</button>
+    <button id="btnOpen">打开输出目录</button>
+  </div>
+
+  <div style="height:8px"></div>
+  <div id="log"></div>
+
+<script src="js/CSInterface.js"></script>
+<script>
+var cs = new CSInterface();
+var CHUNK = 4;            // 每次 evalScript 导出的帧数(分块保 PR 不冻结)
+var EXT_DIR = "";
+try { EXT_DIR = decodeURI(window.__adobe_cep__.getSystemPath("extension")).replace(/\\/g, "/"); } catch (e) {}
+var TASK_PATH = EXT_DIR + "/usf_task.json";
+var STATUS_PATH = EXT_DIR + "/usf_status.json";
+
+var TASK = null, running = false, stopFlag = false;
+var exportedN = 0, totalN = 0, curVideo = -1;
+
+function $(id) { return document.getElementById(id); }
+function log(msg) {
+  var el = $("log");
+  var t = new Date().toTimeString().slice(0, 8);
+  el.textContent = "[" + t + "] " + msg + "\n" + el.textContent;
+}
+function esc(s) { return String(s).replace(/\\/g, "/").replace(/"/g, '\\"'); }
+function es(script, cb) { cs.evalScript(script, cb); }
+function bad(r) {
+  if (!r || r === "EvalScript error." || r.indexOf("ERR|") === 0) {
+    log("错误: " + r); return true;
+  }
+  return false;
+}
+
+// ---- 任务 / 状态文件（与本扩展同目录, 由 USF 主程序写入任务） ----
+function readTask() {
+  var r = window.cep.fs.readFile(TASK_PATH);
+  if (r.err !== 0) return null;
+  try { return JSON.parse(r.data); } catch (e) { return null; }
+}
+function writeStatus(obj) {
+  obj.updated_at = Math.round(Date.now() / 1000);
+  try { window.cep.fs.writeFile(STATUS_PATH, JSON.stringify(obj)); } catch (e) {}
+}
+
+function renderTask() {
+  if (!TASK) {
+    $("taskState").textContent = "未找到任务";
+    $("taskState").className = "v state-err";
+    return;
+  }
+  $("taskState").textContent = "已载入（点①或②开始）";
+  $("taskState").className = "v state-ok";
+  $("tVideos").textContent = TASK.videos.length + " 个";
+  $("tFps").textContent = TASK.fps + " fps";
+  $("tMax").textContent = TASK.max_frames > 0 ? TASK.max_frames + " 帧" : "不限";
+  $("tFmt").textContent = TASK.format.toUpperCase();
+  $("tOut").textContent = TASK.out_dir;
+}
+
+function setProgress(cur, tot) {
+  var pct = tot > 0 ? Math.round(cur * 100 / tot) : 0;
+  $("bar").style.width = pct + "%";
+  $("ptext").textContent = "帧 " + cur + " / " + tot + "（" + pct + "%）";
+}
+
+// ---- 全部视频: 每个视频 导入→建序列→导出 ----
+function startAll() {
+  TASK = readTask();
+  if (!TASK) { log("未找到任务文件: " + TASK_PATH); renderTask(); return; }
+  if (TASK.videos.length === 0) { log("任务中没有视频"); return; }
+  running = true; stopFlag = false;
+  exportedN = 0; totalN = 0;
+  writeStatus({ state: "running", video_index: 0, total_videos: TASK.videos.length,
+                exported: 0, total: 0, out_dir: TASK.out_dir, error: "" });
+  exportVideo(0);
+}
+
+function exportVideo(i) {
+  if (!running || stopFlag) return;
+  if (i >= TASK.videos.length) { finishAll(); return; }
+  curVideo = i;
+  var name = TASK.videos[i].split("/").pop();
+  log("准备素材 " + (i + 1) + "/" + TASK.videos.length + ": " + name);
+  es('usfPrepare("' + esc(TASK.videos[i]) + '")', function (r) {
+    if (bad(r) || !running || stopFlag) return;
+    log("序列已创建: " + r.split("|")[1]);
+    startSeq(function () { exportVideo(i + 1); });
+  });
+}
+
+// ---- 当前序列模式: 跳过导入, 直接对活动序列导出 ----
+function startCurrent() {
+  TASK = readTask();
+  if (!TASK) { log("未找到任务文件（先在 USF 中生成任务）"); renderTask(); return; }
+  running = true; stopFlag = false;
+  curVideo = 0;
+  writeStatus({ state: "running", video_index: 0, total_videos: 1,
+                exported: 0, total: 0, out_dir: TASK.out_dir, error: "" });
+  startSeq(finishAll);
+}
+
+function startSeq(onDone) {
+  var p = TASK.prefix + "v" + (curVideo + 1) + "_";
+  var args = '"' + esc(TASK.out_dir) + '",' + TASK.fps + ',' + TASK.max_frames +
+             ',"' + esc(p) + '","' + esc(TASK.format) + '","' +
+             esc(TASK.range_mode || "full") + '"';
+  es("usfStart(" + args + ")", function (r) {
+    if (bad(r) || !running || stopFlag) return;
+    var parts = r.split("|");
+    totalN = Number(parts[1]);
+    log("序列就绪 · 序列帧率 " + parts[2] + " · 计划导出 " + totalN + " 帧");
+    writeStatus({ state: "running", video_index: curVideo,
+                  total_videos: TASK.videos.length, exported: exportedN,
+                  total: totalN, out_dir: TASK.out_dir, error: "" });
+    pump(onDone);
+  });
+}
+
+function pump(onDone) {
+  if (!running || stopFlag) return;
+  es("usfChunk(" + CHUNK + ")", function (r) {
+    if (bad(r) || !running || stopFlag) return;
+    var p = r.split("|");
+    exportedN = Number(p[1]); totalN = Number(p[2]);
+    setProgress(exportedN, totalN);
+    writeStatus({ state: "running", video_index: curVideo,
+                  total_videos: TASK.videos.length, exported: exportedN,
+                  total: totalN, out_dir: TASK.out_dir, error: "" });
+    if (p[3] === "1") {
+      log("当前视频完成: " + exportedN + " 帧");
+      if (onDone) setTimeout(onDone, 30);
+    } else {
+      setTimeout(function () { pump(onDone); }, 20);
+    }
+  });
+}
+
+function finishAll() {
+  running = false;
+  setProgress(exportedN, totalN || exportedN);
+  log("全部完成 · 共 " + exportedN + " 帧 → " + TASK.out_dir);
+  $("taskState").textContent = "完成 ✓";
+  $("taskState").className = "v state-ok";
+  writeStatus({ state: "done", video_index: curVideo,
+                total_videos: TASK ? TASK.videos.length : 1,
+                exported: exportedN, total: totalN,
+                out_dir: TASK ? TASK.out_dir : "", error: "" });
+}
+
+function failAll(msg) {
+  running = false;
+  $("taskState").textContent = "出错";
+  $("taskState").className = "v state-err";
+  writeStatus({ state: "error", video_index: curVideo,
+                total_videos: TASK ? TASK.videos.length : 1,
+                exported: exportedN, total: totalN,
+                out_dir: TASK ? TASK.out_dir : "", error: String(msg) });
+}
+
+function stopAll() {
+  stopFlag = true; running = false;
+  es("usfCancel()", function () {});
+  log("已停止");
+  writeStatus({ state: "cancelled", video_index: curVideo,
+                total_videos: TASK ? TASK.videos.length : 1,
+                exported: exportedN, total: totalN,
+                out_dir: TASK ? TASK.out_dir : "", error: "" });
+}
+
+// ---- USF 主程序侧取消: 轮询任务文件的 cancelled 标志 ----
+setInterval(function () {
+  if (!running) return;
+  var t = readTask();
+  if (t && t.cancelled) { log("收到主程序停止指令"); stopAll(); }
+}, 1000);
+
+// ---- 打开输出目录 ----
+function openOutDir() {
+  if (!TASK || !TASK.out_dir) return;
+  try { window.cep.process.createProcess("explorer.exe", TASK.out_dir.replace(/\//g, "\\")); } catch (e) {}
+}
+
+// ---- 初始化 ----
+$("btnAll").onclick = startAll;
+$("btnCur").onclick = startCurrent;
+$("btnStop").onclick = stopAll;
+$("btnReload").onclick = function () { TASK = readTask(); renderTask(); log(TASK ? "任务已重载" : "任务文件不存在"); };
+$("btnOpen").onclick = openOutDir;
+TASK = readTask();
+renderTask();
+if (TASK) log("任务已载入: " + TASK.videos.length + " 个视频 · " + TASK.fps + " fps");
+else log("未找到任务。请在 Universal Scene Forge 中「Premiere Pro 高效抽帧」生成任务后点「重新载入任务」。");
+es("usfPing()", function (r) {
+  if (!bad(r)) log("Premiere 脚本引擎就绪 (v" + r.split("|")[1] + ")");
+});
+</script>
+</body>
+</html>

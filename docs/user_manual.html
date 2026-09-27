@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal Scene Forge 用户手册 v0.9.4</title>
+<style>
+:root{
+  --bg:#f6f8fb; --bg2:#ffffff; --ink:#1a2332; --muted:#5b6b83;
+  --rule:#e3e9f2; --accent:#2563eb; --accent2:#0891b2;
+  --ok:#22c55e; --busy:#f59e0b; --error:#ef4444; --off:#6b7280; --skip:#3b82f6;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background:var(--bg); color:var(--ink); font-size:15px; line-height:1.75;
+}
+.mono{font-family:Consolas,"Courier New",monospace;}
+
+/* ============ 顶栏 ============ */
+header.topbar{
+  position:sticky; top:0; z-index:50; background:#0f1b2d; color:#fff;
+  display:flex; align-items:center; gap:14px; padding:14px 32px;
+  box-shadow:0 2px 8px rgba(15,27,45,.25);
+}
+header.topbar .logo{
+  width:34px;height:34px;border-radius:8px;flex:none;
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:15px;color:#fff;
+}
+header.topbar h1{font-size:17px;font-weight:600;letter-spacing:.02em;}
+header.topbar .ver{margin-left:auto;font-size:12px;color:#9fb3d1;
+  border:1px solid #33445e;border-radius:99px;padding:2px 12px;}
+
+/* ============ 布局 ============ */
+.wrap{max-width:1180px;margin:0 auto;padding:36px 24px 80px;display:flex;gap:36px;}
+nav.toc{
+  width:216px;flex:none;position:sticky;top:76px;align-self:flex-start;
+  max-height:calc(100vh - 100px);overflow-y:auto;
+  font-size:13.5px;padding-right:8px;
+}
+nav.toc .toc-title{font-size:11px;font-weight:700;letter-spacing:.14em;
+  color:var(--muted);text-transform:uppercase;margin:18px 0 8px 10px;}
+nav.toc a{
+  display:block;color:var(--muted);text-decoration:none;
+  padding:5px 10px;border-radius:6px;border-left:2px solid transparent;
+}
+nav.toc a:hover{color:var(--accent);background:#eaf1fd;}
+nav.toc a.active{color:var(--accent);background:#eaf1fd;border-left-color:var(--accent);font-weight:600;}
+main{flex:1;min-width:0;max-width:860px;}
+
+section{margin-bottom:52px;scroll-margin-top:90px;}
+h2{
+  font-size:22px;font-weight:700;display:flex;align-items:center;gap:12px;
+  padding-bottom:10px;border-bottom:2px solid var(--rule);margin-bottom:22px;
+}
+h2 .no{
+  flex:none;width:30px;height:30px;border-radius:8px;font-size:14px;
+  background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
+}
+h3{font-size:16.5px;font-weight:700;color:var(--accent);margin:28px 0 12px;}
+h3 .mono{font-size:14px;}
+p{margin-bottom:12px;}
+ul,ol{margin:0 0 14px 24px;}
+li{margin-bottom:6px;}
+b,strong{font-weight:600;}
+a{color:var(--accent);}
+
+/* ============ 组件 ============ */
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:18px 20px;margin:16px 0;}
+.callout{background:var(--bg2);border-left:4px solid var(--accent2);
+  border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14.5px;}
+.callout.warn{border-left-color:var(--busy);}
+.callout.warn .co-title{color:var(--busy);}
+.co-title{font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:4px;
+  text-transform:uppercase;color:var(--accent2);}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:14px 0;background:var(--bg2);}
+th{background:#f0f4fa;text-align:left;font-weight:600;padding:9px 12px;
+  border-bottom:2px solid var(--rule);white-space:nowrap;}
+td{padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+table code{white-space:nowrap;}
+
+code{background:#eef2f8;border-radius:4px;padding:1px 6px;font-size:13px;
+  font-family:Consolas,"Courier New",monospace;color:#334155;}
+
+kbd{background:#fff;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:5px;
+  padding:1px 7px;font-size:12.5px;font-family:Consolas,monospace;}
+
+.steps{counter-reset:step;list-style:none;margin:16px 0;padding:0;}
+.steps li{
+  counter-increment:step;position:relative;padding:0 0 18px 52px;
+}
+.steps li::before{
+  content:counter(step);position:absolute;left:0;top:1px;width:32px;height:32px;
+  border-radius:50%;background:#eaf1fd;color:var(--accent);
+  font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;
+}
+.steps li b{display:block;margin-bottom:2px;}
+
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;
+  margin-right:6px;vertical-align:1px;}
+.dot.ok{background:var(--ok);} .dot.busy{background:var(--busy);}
+.dot.error{background:var(--error);} .dot.off{background:var(--off);}
+.dot.skip{background:var(--skip);}
+
+.pill{display:inline-block;border-radius:99px;padding:1px 10px;font-size:12px;
+  font-weight:600;white-space:nowrap;}
+.pill.core{background:#dcfce7;color:#15803d;}
+.pill.chain{background:#e0edff;color:#1d4ed8;}
+.pill.probe{background:#f1f5f9;color:#475569;}
+.pill.license{background:#fef3c7;color:#b45309;}
+.pill.preview{background:#ede9fe;color:#6d28d9;}
+
+figure{margin:20px 0;background:var(--bg2);border:1px solid var(--rule);
+  border-radius:12px;padding:18px;overflow-x:auto;}
+figcaption{font-size:13px;color:var(--muted);margin-top:10px;text-align:center;}
+
+.faq-item{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:14px 18px;margin-bottom:12px;}
+.faq-item .q{font-weight:700;margin-bottom:6px;color:#0f1b2d;}
+.faq-item .q::before{content:"Q  ";color:var(--accent);font-weight:800;}
+.faq-item .a::before{content:"A  ";color:var(--accent2);font-weight:800;}
+
+footer{border-top:1px solid var(--rule);padding-top:16px;margin-top:48px;
+  font-size:12.5px;color:var(--muted);}
+
+@media (max-width:960px){
+  .wrap{flex-direction:column;}
+  nav.toc{position:static;width:100%;max-height:none;order:2;}
+  header.topbar{padding:12px 18px;}
+}
+@media print{
+  header.topbar{position:static;box-shadow:none;}
+  nav.toc{display:none;}
+  body{background:#fff;}
+  .wrap{padding:0;max-width:100%;}
+  section{page-break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">USF</div>
+  <h1>Universal Scene Forge · 用户手册</h1>
+  <span class="ver">v0.9.4 · 2026-09</span>
+</header>
+
+<div class="wrap">
+
+<nav class="toc" id="toc">
+  <div class="toc-title">目录</div>
+  <a href="#s1">1. 产品概述</a>
+  <a href="#s2">2. 快速上手</a>
+  <a href="#s3">3. 界面导览</a>
+  <a href="#s4">4. 重建流水线详解</a>
+  <a href="#s5">5. 重建参数参考</a>
+  <a href="#s6">6. 支持的 DCC 软件</a>
+  <a href="#s7">7. 调用路径设置</a>
+  <a href="#s8">8. 依赖体检与自动安装</a>
+  <a href="#s9">9. 导出格式与降级链</a>
+  <a href="#s10">10. 常见问题 FAQ</a>
+  <a href="#s11">11. 附录：文件位置</a>
+</nav>
+
+<main>
+
+<!-- ================================================================ -->
+<section id="s1">
+<h2><span class="no">1</span>产品概述</h2>
+
+<p><b>Universal Scene Forge（USF）</b>是一款 Windows 桌面端一体化场景重建与导出工具：
+把一段<b>实拍视频或一组照片</b>变成<b>带纹理的 3D 网格模型</b>，并自动导出为
+FBX / OBJ / GLB / .blend / .uasset 等主流 DCC 格式。</p>
+
+<div class="card">
+<p style="margin:0;"><b>一句话定位：</b>以 <b>3D 高斯泼溅（3D Gaussian Splatting）</b>为重建内核，
+以 <b>Blender / 3ds Max / Maya / Houdini / Cinema 4D / Metashape / UE5</b> 等 DCC 软件的无头桥接
+为后处理管道的「视频 → 可用 3D 资产」生产线。</p>
+</div>
+
+<h3>核心能力</h3>
+<ul>
+  <li><b>一键重建</b>：视频/图像序列输入 → 抽帧 → SfM 位姿求解 → 3DGS 训练 → 泊松网格重建 → LOD 减面，全自动。</li>
+  <li><b>16 款 DCC 软件自动探测</b>：环境变量 → 注册表 → 常见安装路径三级探测，绿灯即代表就绪。</li>
+  <li><b>五级 FBX 导出降级链</b>：Blender → 3ds Max → Maya → Houdini → Cinema 4D，前一个缺席或失败自动切换下一个。</li>
+  <li><b>容错不中断</b>：任何 DCC 步骤失败只亮红灯并写日志，主流程继续，总能拿到 OBJ/GLB 保底产物。</li>
+  <li><b>缺什么补什么</b>：依赖体检 + 官方便携版自动安装（Blender / FFmpeg / COLMAP）。</li>
+</ul>
+
+<h3>系统要求</h3>
+<table>
+  <tr><th>项目</th><th>最低</th><th>推荐</th></tr>
+  <tr><td>操作系统</td><td>Windows 10 64 位</td><td>Windows 11 64 位</td></tr>
+  <tr><td>显卡</td><td>无（CPU 模式，训练极慢）</td><td>NVIDIA GTX 1660+ / RTX 系列，6 GB 显存以上</td></tr>
+  <tr><td>内存</td><td>16 GB</td><td>32 GB</td></tr>
+  <tr><td>磁盘</td><td>2 GB（软件本体 + 依赖）</td><td>SSD，预留 10 GB 以上工作空间</td></tr>
+  <tr><td>训练环境</td><td colspan="2">CUDA 11.8+（含 3DGS 所需 torch，由依赖体检「一键创建训练环境」自动安装，无需预装）</td></tr>
+</table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s2">
+<h2><span class="no">2</span>快速上手</h2>
+
+<p>从安装到拿到第一个模型，全程约 10–40 分钟（取决于视频长度与显卡）。</p>
+
+<ol class="steps">
+  <li><b>安装软件</b><br>
+    双击 <code>UniversalSceneForge_Setup.exe</code> 按向导完成安装；也可使用免安装的绿色版目录，
+    直接双击 <code>UniversalSceneForge.exe</code> 启动。</li>
+
+  <li><b>首次运行 · 依赖体检</b><br>
+    点击左侧工具栏 <kbd>依赖体检</kbd>，顶部结论行会直接告知「依赖够不够执行这个软件」，
+    表格分 Python 库 / 系统工具 / GPU 驱动 / 训练环境四类逐项列出状态。
+    缺失的 Python 库可<b>一键安装</b>（6 个 pip 下载源任选：清华 / 阿里 / 腾讯 / 中科大 / 华为 / 官方直连）；
+    缺 FFmpeg / COLMAP 时点击 <b>安装缺失工具</b>，同意后经<b>多源回退</b>自动下载官方便携版；
+    训练环境未初始化时，点击 <b>一键创建训练环境</b> 即可全自动安装。详见
+    <a href="#s8">第 8 章</a>。</li>
+
+  <li><b>添加输入源（支持多选）</b><br>
+    点击 <kbd>添加文件…</kbd>（按住 Ctrl / Shift 可混合多选）添加 <b>环绕拍摄</b> 的视频
+    （MP4 / MOV / MKV / AVI / WebM 等 13 种格式；15–60 秒、光线稳定、避免纯色背景）
+    与 JPG / PNG / WebP 图片；点击 <kbd>添加目录…</kbd> 可<b>一次选中多个</b>图像序列文件夹；
+    也可直接把多个文件与文件夹<b>批量拖入</b>窗口。
+    视频与图片可<b>混合添加、同时输入</b>——多个视频会各自抽帧后合并，详见
+    <a href="#s3">第 3 章「多源输入」</a>。</li>
+
+  <li><b>设置参数（可选）</b><br>
+    一般保持默认即可：<b>抽帧帧率 2 fps</b>、<b>抽帧上限 300</b>、<b>3DGS 迭代数 30000</b>。
+    想快速预览效果可把迭代数降到 7000。三项参数均<b>不设上限</b>：
+    抽帧上限填 <b>0 = 不限制</b>（抽取全部帧），帧率与迭代数可按需填大值。</li>
+
+  <li><b>点击「▶ 开始重建」</b><br>
+    右侧进度条依次经过 8 个阶段；期间各 DCC 指示灯会实时变黄（执行中）→ 变绿（完成）/ 变红（失败跳过）。</li>
+
+  <li><b>收产物</b><br>
+    完成后在<b>输入源同级的 <code>usf_work/output/</code></b> 目录中收取模型：
+    <code>usf_scene.obj</code>（主网格）、<code>usf_scene_lod1/2.obj</code>（减面版）、
+    <code>usf_scene.fbx / .glb / .blend</code> 等导出物。</li>
+</ol>
+
+<div class="callout">
+  <div class="co-title">拍摄建议</div>
+  拍摄时以目标物为圆心环绕 1–2 圈，快门速度足够高避免运动模糊；光照稳定、避免玻璃/镜面/纯黑纯白区域，
+  SfM 求解成功率会显著提高。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s3">
+<h2><span class="no">3</span>界面导览</h2>
+
+<figure>
+<svg viewBox="0 0 880 582" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <style>
+      .frame{fill:#ffffff;stroke:#cbd5e1;stroke-width:1.5;rx:10;}
+      .title{font:bold 13px 'Segoe UI','Microsoft YaHei';fill:#0f1b2d;}
+      .sub{font:11px 'Segoe UI','Microsoft YaHei';fill:#64748b;}
+      .lbl{font:12px 'Segoe UI','Microsoft YaHei';fill:#1a2332;}
+      .btn{fill:#2563eb;rx:6;}
+      .btn2{fill:#eef2f8;stroke:#cbd5e1;rx:6;}
+      .btnt{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#fff;text-anchor:middle;}
+      .btnt2{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#334155;text-anchor:middle;}
+      .led-g{fill:#22c55e;} .led-y{fill:#f59e0b;} .led-r{fill:#ef4444;}
+      .led-x{fill:#94a3b8;} .led-b{fill:#3b82f6;}
+      .lnk{stroke:#e2e8f0;stroke-width:1;}
+      .m3mnu{font:12.5px 'Segoe UI','Microsoft YaHei';fill:#1a2332;}
+      .m3mi{font:12px 'Segoe UI','Microsoft YaHei';fill:#1a2332;}
+      .m3row{font:11px Consolas,monospace;fill:#334155;}
+      .m3badge{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#2563eb;}
+    </style>
+  </defs>
+  <!-- 外框 -->
+  <rect x="1" y="1" width="878" height="580" fill="#f6f8fb" stroke="#94a3b8" stroke-width="1.5" rx="12"/>
+  <!-- 标题栏 -->
+  <rect x="1" y="1" width="878" height="34" fill="#0f1b2d" rx="12"/>
+  <rect x="1" y="24" width="878" height="11" fill="#0f1b2d"/>
+  <text x="16" y="23" style="font:bold 12px 'Segoe UI';" fill="#fff">Universal Scene Forge v0.9.4</text>
+  <text x="862" y="23" style="font:11px 'Segoe UI';" fill="#9fb3d1" text-anchor="end">─ □ ✕</text>
+
+  <!-- ============ 菜单栏（新增） ============ -->
+  <rect x="1" y="35" width="878" height="23" fill="#ffffff"/>
+  <line x1="1" y1="58" x2="879" y2="58" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="18" y="50" class="m3mnu">文件(F)</text>
+  <text x="80" y="50" class="m3mnu" style="fill:#2563eb;font-weight:bold;">设置(S)</text>
+  <text x="142" y="50" class="m3mnu">帮助(H)</text>
+  <!-- 「设置」菜单展开态 -->
+  <rect x="72" y="58" width="210" height="70" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="6"/>
+  <rect x="72" y="58" width="210" height="26" fill="#eff6ff" rx="6"/>
+  <rect x="72" y="72" width="210" height="12" fill="#eff6ff"/>
+  <text x="88" y="75" class="m3mi" style="fill:#2563eb;font-weight:bold;">软件调用路径…</text>
+  <text x="88" y="102" class="m3mi">依赖体检与一键安装…</text>
+  <path d="M 76 67 L 84 67" stroke="#2563eb" stroke-width="2"/>
+
+  <g transform="translate(0,22)">
+
+  <!-- ============ 左列 ============ -->
+  <rect x="16" y="46" width="330" height="500" fill="#fff" stroke="#e2e8f0" rx="8"/>
+  <!-- 输入源（多源列表） -->
+  <rect x="28" y="58" width="306" height="128" fill="#fbfdff" stroke="#dbe4f0" rx="6"/>
+  <text x="40" y="80" class="title">输入源</text>
+  <text x="322" y="80" class="m3badge" text-anchor="end">多选 · 已加载 2 个源</text>
+  <!-- 多源列表框 -->
+  <rect x="40" y="86" width="284" height="34" fill="#fff" stroke="#cbd5e1" rx="4"/>
+  <rect x="41" y="87" width="282" height="16" fill="#eff6ff" rx="3"/>
+  <rect x="46" y="91" width="10" height="8" fill="#3b82f6" rx="1"/>
+  <text x="62" y="99" class="m3row">🎬 demo_ring.mp4</text>
+  <rect x="46" y="106" width="10" height="8" fill="#22c55e" rx="1"/>
+  <text x="62" y="114" class="m3row">🖼 shots_b\（图像目录）</text>
+  <!-- 源管理按钮行 -->
+  <rect x="40" y="124" width="64" height="18" class="btn2"/>
+  <text x="72" y="137" class="btnt2" style="font-size:10px;">添加文件…</text>
+  <rect x="108" y="124" width="64" height="18" class="btn2"/>
+  <text x="140" y="137" class="btnt2" style="font-size:10px;">添加目录…</text>
+  <rect x="176" y="124" width="42" height="18" class="btn2"/>
+  <text x="197" y="137" class="btnt2" style="font-size:10px;">移除</text>
+  <rect x="222" y="124" width="42" height="18" class="btn2"/>
+  <text x="243" y="137" class="btnt2" style="font-size:10px;">清空</text>
+  <!-- 缩略图预览 -->
+  <rect x="40" y="146" width="260" height="36" fill="#f1f5f9" stroke="#cbd5e1" rx="4"/>
+  <rect x="52" y="151" width="32" height="26" fill="#dbe7f7" rx="2"/>
+  <rect x="90" y="151" width="32" height="26" fill="#dbe7f7" rx="2"/>
+  <rect x="128" y="151" width="32" height="26" fill="#dbe7f7" rx="2"/>
+  <rect x="166" y="151" width="32" height="26" fill="#dbe7f7" rx="2"/>
+  <text x="240" y="168" class="sub">帧缩略图预览</text>
+  <!-- 重建参数 -->
+  <rect x="28" y="196" width="306" height="176" fill="#fbfdff" stroke="#dbe4f0" rx="6"/>
+  <text x="40" y="218" class="title">重建参数</text>
+  <text x="40" y="244" class="lbl">抽帧帧率 (fps):</text>
+  <rect x="200" y="230" width="120" height="20" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="206" y="244" class="sub">2.0</text>
+  <text x="40" y="270" class="lbl">抽帧上限 (0=不限):</text>
+  <rect x="200" y="256" width="120" height="20" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="206" y="270" class="sub">300</text>
+  <text x="40" y="296" class="lbl">3DGS 迭代数:</text>
+  <rect x="200" y="282" width="120" height="20" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="206" y="296" class="sub">30000</text>
+  <text x="40" y="322" class="lbl">导出格式:</text>
+  <text x="200" y="322" class="lbl">☑fbx ☑obj ☑glb ☑blend ☑uasset</text>
+  <text x="40" y="350" class="lbl">☐ 启用 Metashape 洞穴修复 (需 Pro 授权)</text>
+  <!-- 开始/取消 -->
+  <rect x="28" y="384" width="196" height="34" class="btn"/>
+  <text x="126" y="405" class="btnt" style="font-weight:bold;">▶ 开始重建</text>
+  <rect x="232" y="384" width="102" height="34" class="btn2"/>
+  <text x="283" y="405" class="btnt2">■ 取消</text>
+  <!-- 工具按钮行 -->
+  <rect x="28" y="428" width="96" height="28" class="btn2"/>
+  <text x="76" y="446" class="btnt2">依赖体检</text>
+  <rect x="130" y="428" width="110" height="28" class="btn2"/>
+  <text x="185" y="446" class="btnt2">调用路径设置</text>
+  <rect x="246" y="428" width="88" height="28" class="btn2"/>
+  <text x="290" y="446" class="btnt2">用户手册</text>
+  <text x="28" y="490" class="sub">输入源同级生成 usf_work/ 工作目录</text>
+  </g><!-- /左列 -->
+
+  <g transform="translate(0,22)">
+  <!-- ============ 右列 ============ -->
+  <rect x="358" y="46" width="506" height="500" fill="#fff" stroke="#e2e8f0" rx="8"/>
+  <text x="372" y="74" style="font:bold 14px 'Segoe UI','Microsoft YaHei';" fill="#0f1b2d">DCC 后处理 — Blender</text>
+  <text x="840" y="74" class="sub" text-anchor="end">阶段 6/8</text>
+  <rect x="372" y="84" width="478" height="16" fill="#f1f5f9" stroke="#cbd5e1" rx="8"/>
+  <rect x="372" y="84" width="373" height="16" fill="#2563eb" rx="8"/>
+  <text x="840" y="96" class="sub" text-anchor="end">78%</text>
+
+  <!-- 8 段步骤条: ✓完成(绿) / ●执行中(黄) / ○未到(灰) / ✗失败(红) -->
+  <g style="font:9.5px 'Segoe UI','Microsoft YaHei';" text-anchor="middle">
+    <rect x="372" y="108" width="56" height="16" rx="8" fill="#dcfce7" stroke="#22c55e"/><text x="400" y="120" fill="#15803d">✓采集</text>
+    <rect x="432" y="108" width="56" height="16" rx="8" fill="#dcfce7" stroke="#22c55e"/><text x="460" y="120" fill="#15803d">✓SfM</text>
+    <rect x="492" y="108" width="56" height="16" rx="8" fill="#dcfce7" stroke="#22c55e"/><text x="520" y="120" fill="#15803d">✓训练</text>
+    <rect x="552" y="108" width="56" height="16" rx="8" fill="#dcfce7" stroke="#22c55e"/><text x="580" y="120" fill="#15803d">✓网格</text>
+    <rect x="612" y="108" width="56" height="16" rx="8" fill="#dcfce7" stroke="#22c55e"/><text x="640" y="120" fill="#15803d">✓UE5</text>
+    <rect x="672" y="108" width="56" height="16" rx="8" fill="#fef3c7" stroke="#f59e0b"/><text x="700" y="120" fill="#b45309">●后处理</text>
+    <rect x="732" y="108" width="56" height="16" rx="8" fill="none" stroke="#cbd5e1"/><text x="760" y="120" fill="#94a3b8">○修复</text>
+    <rect x="792" y="108" width="56" height="16" rx="8" fill="none" stroke="#cbd5e1"/><text x="820" y="120" fill="#94a3b8">○导出</text>
+  </g>
+  <text x="372" y="142" class="sub">Blender: 去重 / 删松散面 / 重算法线…</text>
+
+  <text x="372" y="162" class="title">DCC 调用状态</text>
+  <!-- LED 矩阵 4列×4行 -->
+  <g>
+    <circle cx="384" cy="180" r="6" class="led-g"/><text x="396" y="185" class="lbl">Blender</text>
+    <circle cx="500" cy="180" r="6" class="led-y"/><text x="512" y="185" class="lbl">3ds Max</text>
+    <circle cx="616" cy="180" r="6" class="led-g"/><text x="628" y="185" class="lbl">Maya</text>
+    <circle cx="732" cy="180" r="6" class="led-x"/><text x="744" y="185" class="lbl">ZBrush</text>
+
+    <circle cx="384" cy="210" r="6" class="led-g"/><text x="396" y="215" class="lbl">Houdini</text>
+    <circle cx="500" cy="210" r="6" class="led-x"/><text x="512" y="215" class="lbl">Cinema 4D</text>
+    <circle cx="616" cy="210" r="6" class="led-x"/><text x="628" y="215" class="lbl">Modo</text>
+    <circle cx="732" cy="210" r="6" class="led-x"/><text x="744" y="215" class="lbl">Mudbox</text>
+
+    <circle cx="384" cy="240" r="6" class="led-x"/><text x="396" y="245" class="lbl">Substance</text>
+    <circle cx="500" cy="240" r="6" class="led-x"/><text x="512" y="245" class="lbl">Marmoset</text>
+    <circle cx="616" cy="240" r="6" class="led-x"/><text x="628" y="245" class="lbl">Rhino</text>
+    <circle cx="732" cy="240" r="6" class="led-r"/><text x="744" y="245" class="lbl">Metashape</text>
+
+    <circle cx="384" cy="270" r="6" class="led-b"/><text x="396" y="275" class="lbl">UE5</text>
+    <circle cx="500" cy="270" r="6" class="led-g"/><text x="512" y="275" class="lbl">GPU/CUDA</text>
+  </g>
+
+  <rect x="372" y="292" width="478" height="236" fill="#0f1b2d" rx="6"/>
+  <text x="388" y="318" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [1/8 INGEST] FFmpeg 抽帧 96 帧 → frames/</text>
+  <text x="388" y="338" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [2/8 SFM] COLMAP 匹配中…</text>
+  <text x="388" y="358" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [3/8 TRAIN] 3DGS 迭代 18200/30000</text>
+  <text x="388" y="378" style="font:11.5px Consolas,monospace;" fill="#f59e0b">[WARNING] Metashape 未授权, 修复步骤跳过</text>
+  <text x="388" y="398" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [4/8 MESH] 泊松重建 depth=9 → usf_scene.obj</text>
+  <text x="388" y="418" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [5/8 UE5预览] 中间 OBJ 已推送 /Game/USF</text>
+  <text x="388" y="438" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [6/8 DCC后处理] Blender 清理/UV/材质</text>
+  <text x="388" y="458" style="font:11.5px Consolas,monospace;" fill="#ef4444">[ERROR] 3ds Max FBX 导出失败: 超时</text>
+  <text x="388" y="478" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] FBX 由 Maya 降级导出</text>
+  <text x="388" y="498" style="font:11.5px Consolas,monospace;" fill="#22c55e">[INFO] [8/8 EXPORT] 产物: usf_scene.fbx</text>
+  <text x="388" y="522" style="font:11.5px Consolas,monospace;" fill="#9fb3d1">日志控制台（只读 · 彩色分级）</text>
+  </g><!-- /右列 -->
+</svg>
+<figcaption>主界面布局：顶部菜单栏（文件 / 设置 / 帮助）/ 左侧多源输入与参数 / 右侧进度、DCC 指示灯与日志控制台</figcaption>
+</figure>
+
+<h3>状态指示灯颜色含义</h3>
+<table>
+  <tr><th>颜色</th><th>状态</th><th>含义</th></tr>
+  <tr><td><span class="dot ok"></span>绿色</td><td><b>ok</b></td><td>软件已探测到且步骤执行成功</td></tr>
+  <tr><td><span class="dot busy"></span>黄色</td><td><b>busy</b></td><td>正在被流水线调用（执行中）</td></tr>
+  <tr><td><span class="dot error"></span>红色</td><td><b>error</b></td><td>调用失败（看日志定位原因，主流程已自动跳过）</td></tr>
+  <tr><td><span class="dot off"></span>灰色</td><td><b>off</b></td><td>未检测到该软件（不影响主流程）</td></tr>
+  <tr><td><span class="dot skip"></span>蓝色</td><td><b>skipped</b></td><td>该步骤被主动跳过（如未勾选修复）</td></tr>
+</table>
+
+<h3>重建进度反馈区</h3>
+
+<p>主窗口右侧顶部是重建进度的实时反馈区，点击「▶ 开始重建」后从上到下由四部分组成：</p>
+
+<ul>
+  <li><b>阶段标题行</b> —— 左侧显示当前阶段名（如「DCC 后处理」），右侧显示「阶段 n/8」计数；</li>
+  <li><b>总进度条</b> —— 绿色填充的 0–100% 总进度，各阶段对应的百分比区间见第 4 章流水线表；</li>
+  <li><b>8 段步骤条</b> —— 采集 → SfM → 训练 → 网格 → UE5 → 后处理 → 修复 → 导出，
+      每个阶段一枚胶囊标签，状态随流水线实时流转（见下表）；</li>
+  <li><b>动态消息行</b> —— 显示当前动作，如「Blender: 去重 / 删松散面」「3DGS 迭代 18200/30000」。</li>
+</ul>
+
+<table>
+  <tr><th>标记</th><th>状态</th><th>含义</th></tr>
+  <tr><td class="mono">○ 阶段名</td><td>待执行（灰）</td><td>流水线尚未推进到该阶段</td></tr>
+  <tr><td class="mono">● 阶段名</td><td>执行中（黄）</td><td>该阶段正在运行，日志控制台有实时输出</td></tr>
+  <tr><td class="mono">✓ 阶段名</td><td>已完成（绿）</td><td>该阶段成功结束</td></tr>
+  <tr><td class="mono">✗ 阶段名</td><td>失败跳过（红）</td><td>该阶段出错，主流程已自动跳过并继续后续阶段</td></tr>
+</table>
+
+<div class="callout">
+  <div class="co-title">失败反馈</div>
+  阶段失败或重建异常终止时，除步骤条标红 <b>✗</b> 外，软件还会弹出<b>醒目提醒窗口</b>，
+  汇总失败原因并给出常见修复建议（用「设置 → 依赖体检」安装缺失组件、降低迭代数或减少输入帧数）；
+  详细错误可在日志控制台和 <code>usf_work/logs/</code> 中查看。全部成功完成时不弹窗，进度条停在 100%。
+</div>
+
+<h3>顶部菜单栏</h3>
+
+<p>主窗口标题栏下方新增了标准菜单栏，常用功能不再需要到左侧工具按钮区寻找：</p>
+
+<table>
+  <tr><th>菜单</th><th>菜单项</th><th>作用</th><th>快捷键</th></tr>
+  <tr><td rowspan="5"><b>文件(F)</b></td>
+      <td>添加视频/图片输入…</td><td>多选对话框，一次添加多个视频 / 图片文件</td><td>Ctrl+O</td></tr>
+  <tr><td>添加图像目录…</td><td>添加一个图像序列文件夹作为输入源</td><td>—</td></tr>
+  <tr><td>Premiere Pro 高效抽帧…</td><td>用 PR 解码器批量导帧（自动安装扩展并联动进度，见本章末小节）</td><td>—</td></tr>
+  <tr><td>退出</td><td>关闭程序</td><td>Ctrl+Q</td></tr>
+  <tr><td colspan="3" class="sub">（分隔线上方为输入源入口，与左栏按钮等效）</td></tr>
+  <tr><td rowspan="2"><b>设置(S)</b></td>
+      <td><b>软件调用路径…</b></td><td>打开「项目调用路径设置」对话框，查看 / 覆盖 16 款 DCC 软件的调用入口（详见第 7 章）</td><td>—</td></tr>
+  <tr><td>依赖体检与一键安装…</td><td>打开依赖体检对话框（详见第 8 章）</td><td>—</td></tr>
+  <tr><td rowspan="2"><b>帮助(H)</b></td>
+      <td>用户手册</td><td>在浏览器中打开本手册</td><td>F1</td></tr>
+  <tr><td>关于 Universal Scene Forge</td><td>版本与功能概要</td><td>—</td></tr>
+</table>
+
+<div class="callout">
+  <div class="co-title">双入口说明</div>
+  「设置 → 软件调用路径…」与主界面左侧的 <kbd>调用路径设置</kbd> 按钮打开的是同一个对话框，
+  均保存到 <code>settings.json</code> 并在关闭后自动重新探测 DCC、刷新指示灯矩阵。
+  菜单栏是标准入口，左栏按钮是快捷方式，二者可任意选用。
+</div>
+
+<h3>多源输入（多个视频与图片同时输入）</h3>
+
+<p>输入源面板已从单一路径升级为<b>多源列表</b>，支持把多个视频文件、图像目录与单张图片
+<b>混合添加、同时输入</b>，一次重建即可融合全部素材：</p>
+
+<ol class="steps">
+  <li><b>添加源</b> —— <kbd>添加文件…</kbd>（文件对话框中按住 Ctrl / Shift 可<b>混合多选</b>视频与图片）、
+    <kbd>添加目录…</kbd>（目录对话框中按住 Ctrl / Shift 可<b>一次选中多个目录</b>），
+    或直接把多个文件与文件夹<b>批量拖入</b>主窗口；重复添加同一路径会被自动忽略。</li>
+  <li><b>管理源</b> —— 列表中选中一行或多行后点 <kbd>移除所选</kbd>，或 <kbd>清空</kbd> 全部；
+    拖入 / 添加的顺序即处理顺序，可随时增删后再次点「▶ 开始重建」。</li>
+  <li><b>开始重建</b> —— 各源按以下规则合并为统一帧序列：
+    <table style="margin-top:10px;">
+      <tr><th>源类型</th><th>处理方式</th></tr>
+      <tr><td>视频（MP4/MOV/AVI/MKV/WMV/M4V/WebM/FLV/MPG/MPEG/TS/M2TS/MTS）</td>
+          <td>各自抽帧到 <code>usf_work/frames/&lt;视频名&gt;_NN/</code> 独立子目录，互不覆盖；帧率与上限取「重建参数」设置</td></tr>
+      <tr><td>图像目录</td><td>按文件名排序后整目录收集（JPG/JPEG/PNG/BMP/TIF/TIFF/WebP）</td></tr>
+      <tr><td>单张图片</td><td>直接并入帧序列（含 WebP）</td></tr>
+    </table>
+    合并后<b>自动去重</b>（同一路径只算一次），再统一进入预处理 → SfM → 3DGS 训练。</li>
+</ol>
+
+<div class="callout">
+  <div class="co-title">多源容错规则</div>
+  <ul style="margin:6px 0 0 18px;padding:0;">
+    <li>某个源失败（视频损坏、目录为空、路径不存在）只<b>跳过该源并记入日志</b>，不影响其余源；</li>
+    <li>全部源都无产出时，输入采集阶段才报错；</li>
+    <li>工作目录 <code>usf_work/</code> 跟随<b>列表中第一个源</b>所在位置（文件取同级、目录取子级）；</li>
+    <li>多视频时注意总帧数 = 各视频抽帧数之和，「抽帧上限」对<b>每个视频独立生效</b>（填 0 = 全部不限制），
+      建议单次重建总帧数控制在几百帧量级，避免过多帧数拖慢 SfM 与训练。</li>
+  </ul>
+</div>
+
+<h3>Premiere Pro 高效抽帧（输入预处理）</h3>
+
+<p>对于码流特殊、ffmpeg / OpenCV 解码不稳，或需要<b>先剪辑、调色再导帧</b>的视频，
+可改用 Adobe Premiere Pro 的解码器批量导帧（v0.9.3 起）：</p>
+
+<ol class="steps">
+  <li><b>生成任务</b> —— 菜单 <kbd>文件 → Premiere Pro 高效抽帧…</kbd> 打开对话框，
+    输入源列表中的视频会自动带入（也可在对话框内继续增删）；设置抽帧帧率、上限与
+    帧输出目录后点 <kbd>生成任务并启动 Premiere</kbd> —— 首次使用会自动安装
+    「USF 抽帧导出」CEP 扩展并启用加载权限；</li>
+  <li><b>面板导出</b> —— 在 Premiere 中打开 <kbd>窗口 → 扩展 → USF 抽帧导出</kbd>，
+    点「① 自动导入并导出全部视频」即可逐个视频自动建序列并按设定帧率导出 JPEG；
+    也可先把素材拖入时间线手动剪辑，改用「② 仅导出当前序列」（支持入出点范围）；</li>
+  <li><b>回填输入源</b> —— 导出完成后，帧目录会<b>自动加入主程序输入源列表</b>，
+    后续流程与普通图像目录完全一致。</li>
+</ol>
+
+<div class="callout">
+  <div class="co-title">PR 抽帧说明</div>
+  <ul style="margin:6px 0 0 18px;padding:0;">
+    <li>需要 Premiere Pro 2019（13.0）及以上版本；扩展安装于
+      <code>%APPDATA%\Adobe\CEP\extensions\</code>，仅写入当前用户目录，无需管理员权限；</li>
+    <li>多视频的帧名前缀自动区分（<code>frame_v1_00000.jpg</code>、<code>frame_v2_00000.jpg</code>…），
+      同一输出目录互不覆盖；</li>
+    <li>主程序对话框与 PR 面板通过任务 / 状态文件联动：对话框实时显示导出进度，
+      可随时「发送停止指令」；</li>
+    <li>PR 面板按 4 帧一组分块导出，导出过程中 Premiere 界面保持可操作。</li>
+  </ul>
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s4">
+<h2><span class="no">4</span>重建流水线详解</h2>
+
+<p>点击「开始重建」后，数据依次经过 8 个阶段。每个阶段都有独立超时看门狗与容错包裹——
+<b>单阶段失败不会中断整体流程</b>，只影响对应产物。</p>
+
+<table>
+  <tr><th>#</th><th>阶段</th><th>做什么</th><th>产物</th><th>进度区间</th></tr>
+  <tr><td>1</td><td><b>INGEST</b> 抽帧</td><td>FFmpeg 按设定帧率从视频抽帧；并行预处理（缩放到最长边 1600px）</td><td><code>frames/*.jpg</code></td><td>0–10%</td></tr>
+  <tr><td>2</td><td><b>SFM</b> 位姿求解</td><td>COLMAP 特征提取 → 全量匹配 → 稀疏重建，求出每帧相机位姿</td><td><code>sparse/0/*.bin</code></td><td>10–20%</td></tr>
+  <tr><td>3</td><td><b>TRAIN</b> 3DGS 训练</td><td>gaussian-splatting 官方实现训练高斯场（独立 Python 环境子进程）</td><td><code>point_cloud.ply</code></td><td>20–55%</td></tr>
+  <tr><td>4</td><td><b>MESH</b> 网格化</td><td>SH 系数 → 顶点色；不透明度过滤 → 泊松重建 → 密度裁剪 → LOD 减面</td><td><code>usf_scene.obj</code> + LOD</td><td>55–65%</td></tr>
+  <tr><td>5</td><td><b>UE5 预览</b></td><td>中间 OBJ/FBX 推送到 UE5 工程 <code>/Game/USF</code> 并保存 .uasset</td><td>UE5 内资产</td><td>65–70%</td></tr>
+  <tr><td>6</td><td><b>DCC 后处理</b></td><td>Blender 无头模式：去重/删松散面/重算法线 → 智能 UV → 顶点色材质 → 导出</td><td>FBX/GLB/BLEND</td><td>70–85%</td></tr>
+  <tr><td>7</td><td><b>修复（可选）</b></td><td>Metashape Pro：对齐照片 → 稠密云 → 建模 → 空洞修复（需授权，默认关闭）</td><td>修复版 OBJ</td><td>—</td></tr>
+  <tr><td>8</td><td><b>EXPORT</b> 导出分发</td><td>按勾选的格式分发导出；FBX 走五级降级链</td><td><code>output/</code> 全部产物</td><td>85–100%</td></tr>
+</table>
+
+<div class="callout">
+  <div class="co-title">耗时参考（RTX 3060 / 30 秒视频 / 30000 迭代）</div>
+  抽帧约 1 分钟 · SfM 约 3–8 分钟 · 3DGS 训练约 15–25 分钟 · 网格化约 2 分钟 ·
+  后处理与导出约 2–5 分钟。迭代数降为 7000 可将训练压缩到约 5 分钟（质量略降）。
+</div>
+
+<h3>取消与超时</h3>
+<ul>
+  <li>点击 <kbd>■ 取消</kbd> 后，软件会终止所有子进程树（<code>taskkill /T /F</code>）并安全停止。</li>
+  <li>每个 DCC 步骤都有超时看门狗（默认：Blender/Max/Maya 60 分钟，Houdini/C4D 30 分钟，UE5 15 分钟，Metashape 4 小时）。
+      超时自动杀进程并切换降级方案。</li>
+</ul>
+</section>
+
+<!-- ================================================================ -->
+<section id="s5">
+<h2><span class="no">5</span>重建参数参考</h2>
+
+<table>
+  <tr><th>参数</th><th>默认</th><th>说明</th></tr>
+  <tr><td>抽帧帧率 (fps)</td><td>2.0</td><td>每秒从视频抽取的帧数，<b>不设上限</b>（0.1–999）。环绕拍摄 30 秒 ≈ 60 帧；填源视频帧率即全帧率抽取；纹理丰富的场景可降到 1–1.5 fps</td></tr>
+  <tr><td>抽帧上限</td><td>300</td><td>每个视频抽帧总数上限，<b>不设上限</b>；填 <b>0 = 不限制</b>（抽取全部帧）。3DGS 常规 100–400 帧足够；不限帧数抽取会显著拉长 SfM 时间</td></tr>
+  <tr><td>3DGS 迭代数</td><td>30000</td><td>训练迭代次数，<b>不设上限</b>。7000 可快速预览；40000+ 用于最终交付</td></tr>
+  <tr><td>导出格式</td><td>全选</td><td>fbx / obj / glb / blend / uasset，按需勾选</td></tr>
+  <tr><td>Metashape 修复</td><td>关闭</td><td>需要 Agisoft Metashape Professional 授权，开启后第 7 阶段生效</td></tr>
+</table>
+
+<h3>高级参数（settings.json）</h3>
+<p>以下参数不在界面暴露，可编辑安装目录下 <code>settings.json</code> 调整：</p>
+<table>
+  <tr><th>键</th><th>默认</th><th>说明</th></tr>
+  <tr><td><code>preprocess_max_side</code></td><td>1600</td><td>预处理最长边像素（越大越吃显存）</td></tr>
+  <tr><td><code>poisson_depth</code></td><td>9</td><td>泊松重建八叉树深度（8–11）</td></tr>
+  <tr><td><code>opacity_threshold</code></td><td>0.35</td><td>高斯不透明度过滤阈值</td></tr>
+  <tr><td><code>density_quantile</code></td><td>0.02</td><td>泊松密度下分位裁剪</td></tr>
+  <tr><td><code>lod_ratios</code></td><td>[1.0, 0.5, 0.25]</td><td>LOD 面数比例序列</td></tr>
+  <tr><td><code>bake_ao</code></td><td>false</td><td>Blender Cycles AO 烘焙（更慢但更好看）</td></tr>
+  <tr><td><code>pip_mirror</code></td><td>tsinghua</td><td>依赖安装镜像源（tsinghua / aliyun / none）</td></tr>
+</table>
+<p>修改后需重启软件生效。</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s6">
+<h2><span class="no">6</span>支持的 DCC 软件</h2>
+
+<p>USF 通过<b>三级自动探测</b>识别本机已安装的 DCC 软件：<b>环境变量 → 注册表 → 常见安装路径/Steam 库</b>。
+探测结果实时显示在主界面指示灯矩阵中。当前共支持 16 款软件，按流水线角色分为四类：</p>
+
+<table>
+  <tr><th>软件</th><th>角色</th><th>调用方式</th><th>说明</th></tr>
+  <tr>
+    <td><b>Blender</b></td><td><span class="pill core">核心桥接</span></td>
+    <td class="mono">blender --background --python</td>
+    <td>网格清理、智能 UV、顶点色材质、LOD、FBX/GLB/BLEND 导出。缺席时可自动安装官方便携版</td>
+  </tr>
+  <tr>
+    <td><b>Autodesk 3ds Max</b></td><td><span class="pill chain">FBX 降级链</span></td>
+    <td class="mono">3dsmaxbatch / MaxStart</td>
+    <td>Blender 失败时的第一顺位 FBX 导出器</td>
+  </tr>
+  <tr>
+    <td><b>Autodesk Maya</b></td><td><span class="pill chain">FBX 降级链</span></td>
+    <td class="mono">mayapy.exe（无头）</td>
+    <td>降级链第二顺位</td>
+  </tr>
+  <tr>
+    <td><b>SideFX Houdini</b></td><td><span class="pill chain">FBX 降级链</span></td>
+    <td class="mono">hython.exe（无头）</td>
+    <td>降级链第三顺位；OBJ 导入后经 FBX ROP 导出</td>
+  </tr>
+  <tr>
+    <td><b>Maxon Cinema 4D</b></td><td><span class="pill chain">FBX 降级链</span></td>
+    <td class="mono">Commandline.exe</td>
+    <td>降级链第四顺位；需本机有可用授权（无授权会快速失败并跳过）</td>
+  </tr>
+  <tr>
+    <td><b>Agisoft Metashape Pro</b></td><td><span class="pill license">修复（需授权）</span></td>
+    <td class="mono">metashape.exe -r</td>
+    <td>第 7 阶段洞穴修复；无 Pro 授权自动跳过</td>
+  </tr>
+  <tr>
+    <td><b>Unreal Engine 5</b></td><td><span class="pill preview">预览推流</span></td>
+    <td class="mono">UnrealEditor-Cmd -run=pythonscript</td>
+    <td>把中间 OBJ/FBX 推送到 UE5 工程 /Game/USF 并保存 .uasset</td>
+  </tr>
+  <tr>
+    <td><b>Maxon ZBrush</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>探测 + 路径管理已就绪，供后续雕刻/重拓扑环节接入</td>
+  </tr>
+  <tr>
+    <td><b>Foundry Modo</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>同上</td>
+  </tr>
+  <tr>
+    <td><b>Autodesk Mudbox</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>同上</td>
+  </tr>
+  <tr>
+    <td><b>Adobe Substance 3D</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>同上（纹理链路预留）</td>
+  </tr>
+  <tr>
+    <td><b>Marmoset Toolbag</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>同上（烘焙/展示链路预留）</td>
+  </tr>
+  <tr>
+    <td><b>Rhinoceros 3D</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>同上（CAD/NURBS 链路预留）</td>
+  </tr>
+  <tr>
+    <td><b>3D-Coat</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>探测 + 路径管理已就绪（体素雕刻 / 重拓扑 / UV 链路预留）</td>
+  </tr>
+  <tr>
+    <td><b>RizomUV</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>探测 + 路径管理已就绪（专业 UV 展开链路预留）</td>
+  </tr>
+  <tr>
+    <td><b>TopoGun</b></td><td><span class="pill probe">状态探测</span></td>
+    <td class="mono">—</td>
+    <td>探测 + 路径管理已就绪（重拓扑 / 烘焙链路预留）</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <div class="co-title">三级探测顺序</div>
+  ① <b>环境变量</b>（如 <code>BLENDER_BIN</code>、<code>HFS</code> 等） →
+  ② <b>注册表</b>（HKLM 各厂商安装键） →
+  ③ <b>常见安装路径 / Steam 库</b>（Program Files、MAXON、Side Effects Software 等目录 glob）。
+  命中任意一级即显示绿灯；全部未命中显示灰灯。便携版/绿色解压版建议用第 7 章的手动路径指定。
+</div>
+
+<h3>Blender 核心桥接与缺席自动安装</h3>
+
+<p>Blender 是整条 FBX 流水线的<b>首选导出器</b>（降级链起点），也是唯一支持「缺席自动安装」的软件：
+探测未命中时可从 <span class="mono">download.blender.org</span> 下载官方便携版 ZIP（约 300MB），
+解压到用户目录即可使用，<b>全程无需管理员权限</b>。下图展示完整调用链路：</p>
+
+<figure>
+<svg viewBox="0 0 880 470" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="b6a" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="b6r" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <style>
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .nd2{fill:#f1f5f9;stroke:#94a3b8;stroke-width:1.2;rx:8;}
+    .nt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .nt2{font:12px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .ndt{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;text-anchor:middle;}
+    .cmd{fill:#0f1b2d;rx:6;}
+    .cmdt{font:11px Consolas,monospace;fill:#7dd3fc;}
+    .tag{font:bold 10.5px 'Segoe UI','Microsoft YaHei';fill:#7c3aed;text-anchor:middle;}
+    .out{fill:#dcfce7;stroke:#22c55e;stroke-width:1.5;rx:8;}
+    .ot{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .fl{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.2;rx:8;}
+    .ft{font:11px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+  </style>
+
+  <!-- 左：探测与自动安装 -->
+  <rect x="14" y="30" width="200" height="52" class="nd"/>
+  <text x="114" y="52" class="nt">① 三级探测</text>
+  <text x="114" y="70" class="ndt">BLENDER_BIN → 注册表 → 路径</text>
+  <line x1="214" y1="46" x2="248" y2="46" stroke="#2563eb" stroke-width="1.8" marker-end="url(#b6a)"/>
+  <text x="231" y="36" class="ndt">命中</text>
+  <rect x="250" y="20" width="150" height="52" class="nd"/>
+  <text x="325" y="42" class="nt">blender.exe</text>
+  <text x="325" y="60" class="ndt">本地已安装</text>
+
+  <line x1="114" y1="82" x2="114" y2="106" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#b6r)"/>
+  <text x="126" y="98" class="ndt">未命中</text>
+  <rect x="14" y="108" width="200" height="64" class="fl"/>
+  <text x="114" y="130" class="ft">② 自动安装官方便携版</text>
+  <text x="114" y="147" class="ndt">download.blender.org ZIP</text>
+  <text x="114" y="162" class="ndt">解压到用户目录 · 无需管理员</text>
+  <line x1="214" y1="140" x2="248" y2="140" stroke="#2563eb" stroke-width="1.8" marker-end="url(#b6a)"/>
+  <line x1="325" y1="72" x2="325" y2="96" stroke="#2563eb" stroke-width="1.8" marker-end="url(#b6a)"/>
+
+  <!-- 中：无头调用 -->
+  <rect x="250" y="98" width="380" height="74" class="cmd"/>
+  <text x="440" y="120" class="cmdt">blender --background --factory-startup</text>
+  <text x="440" y="138" class="cmdt">--python mesh_to_fbx.py -- params.json</text>
+  <text x="440" y="158" class="tag">JSON 参数注入 + [USF] 标签协议回传（规避引号转义）</text>
+  <line x1="630" y1="135" x2="664" y2="135" stroke="#2563eb" stroke-width="1.8" marker-end="url(#b6a)"/>
+
+  <!-- 右：处理与导出 -->
+  <rect x="666" y="20" width="200" height="52" class="nd"/>
+  <text x="766" y="42" class="nt">③ 网格四项处理</text>
+  <text x="766" y="60" class="ndt">清理 · 智能UV · 顶点色 · LOD</text>
+  <line x1="766" y1="72" x2="766" y2="96" stroke="#2563eb" stroke-width="1.8" marker-end="url(#b6a)"/>
+  <rect x="666" y="98" width="200" height="74" class="out"/>
+  <text x="766" y="120" class="ot">④ usf_scene.fbx</text>
+  <text x="766" y="138" class="ndt">附带 .glb + .blend 双副产物</text>
+  <text x="766" y="155" class="ndt">网格 + 材质 + 嵌入纹理</text>
+
+  <!-- 底部：失败降级 -->
+  <line x1="440" y1="172" x2="440" y2="196" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#b6r)"/>
+  <text x="452" y="188" class="ndt">失败 / 超时</text>
+  <rect x="290" y="198" width="300" height="52" class="nd2"/>
+  <text x="440" y="220" class="nt2" style="font-weight:bold;">⑤ 触发 FBX 五级降级链</text>
+  <text x="440" y="238" class="ndt">3ds Max → Maya → Houdini → C4D（见第 9 章）</text>
+
+  <!-- 底部说明带 -->
+  <rect x="14" y="270" width="852" height="180" fill="#fbfdff" stroke="#dbe4f0" rx="8"/>
+  <text x="34" y="298" style="font:bold 13px 'Segoe UI','Microsoft YaHei';" fill="#0f1b2d">命令参数逐项说明</text>
+  <text x="34" y="324" class="cmdt" style="fill:#334155;">--background          无头模式：不启动 GUI 窗口，不加载用户界面</text>
+  <text x="34" y="348" class="cmdt" style="fill:#334155;">--factory-startup     干净启动：跳过用户插件/主题，避免脚本被干扰</text>
+  <text x="34" y="372" class="cmdt" style="fill:#334155;">--python &lt;script&gt;    执行 USF 注入的桥接脚本（随安装包分发）</text>
+  <text x="34" y="396" class="cmdt" style="fill:#334155;">-- params.json         紧跟双横线的参数原样传入脚本（argv 解析）</text>
+  <text x="34" y="424" style="font:11.5px 'Segoe UI','Microsoft YaHei';" fill="#5b6b83">所有路径、LOD 比例、导出选项均写入 params.json 由脚本读取——Windows 命令行引号转义问题由此彻底规避；</text>
+  <text x="34" y="442" style="font:11.5px 'Segoe UI','Microsoft YaHei';" fill="#5b6b83">执行进度与结果通过 stdout 中的 <tspan style="fill:#7c3aed;font-weight:bold;">[USF]</tspan> 前缀标签行回传主程序解析。</text>
+</svg>
+<figcaption>图 6-1 · Blender 核心桥接工作流：三级探测 / 缺席自动安装 → 无头调用 → 网格处理 → FBX/GLB/BLEND 导出</figcaption>
+</figure>
+
+<h3>3ds Max 与 Maya 无头桥接机制</h3>
+
+<p>降级链前两级（Max、Maya）均为 Autodesk 系无头调用，但机制不同：Max 走<b>官方批处理解释器
+3dsmaxbatch.exe</b>（Max 2018+ 与主程序同目录），Maya 走<b>独立 Python 解释器 mayapy.exe</b>
+（脚本内自行初始化 maya.standalone）。下图对比两者的桥接细节：</p>
+
+<figure>
+<svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="m6a" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="m6r" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#b45309"/>
+    </marker>
+  </defs>
+  <style>
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .nt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .ndt{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;text-anchor:middle;}
+    .cmd{fill:#0f1b2d;rx:6;}
+    .cmdt{font:11px Consolas,monospace;fill:#7dd3fc;}
+    .warn{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.2;rx:8;}
+    .wt{font:11px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+    .out{fill:#dcfce7;stroke:#22c55e;stroke-width:1.5;rx:8;}
+    .ot{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+  </style>
+
+  <!-- 分栏标题 -->
+  <rect x="14" y="16" width="418" height="30" fill="#0f1b2d" rx="6"/>
+  <text x="223" y="36" style="font:bold 13px 'Segoe UI','Microsoft YaHei';" fill="#fff" text-anchor="middle">3ds Max（降级链 1）</text>
+  <rect x="448" y="16" width="418" height="30" fill="#0f1b2d" rx="6"/>
+  <text x="657" y="36" style="font:bold 13px 'Segoe UI','Microsoft YaHei';" fill="#fff" text-anchor="middle">Maya（降级链 2）</text>
+
+  <!-- Max 链 -->
+  <rect x="30" y="62" width="170" height="52" class="nd"/>
+  <text x="115" y="84" class="nt">中间产物 OBJ</text>
+  <text x="115" y="102" class="ndt">上阶段网格</text>
+  <line x1="200" y1="88" x2="232" y2="88" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="234" y="62" width="184" height="52" class="cmd"/>
+  <text x="326" y="84" class="cmdt" text-anchor="middle">3dsmaxbatch.exe</text>
+  <text x="326" y="102" class="cmdt" text-anchor="middle" style="font-size:10px;">&lt;usf_export.ms&gt;</text>
+  <line x1="326" y1="114" x2="326" y2="138" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="234" y="140" width="184" height="64" class="nd"/>
+  <text x="326" y="162" class="nt">MAXScript 生成脚本</text>
+  <text x="326" y="179" class="ndt">导出选项全部写入 .ms 文件</text>
+  <text x="326" y="194" class="ndt">无 UI 弹窗 · 纯后台</text>
+  <line x1="326" y1="204" x2="326" y2="228" stroke="#b45309" stroke-width="1.8" marker-end="url(#m6r)"/>
+  <rect x="234" y="230" width="184" height="56" class="warn"/>
+  <text x="326" y="251" class="wt">协议回传走结果文件</text>
+  <text x="326" y="268" class="ndt">3dsmaxbatch 不把 MAXScript 的</text>
+  <text x="326" y="282" class="ndt">format 输出接到 stdout</text>
+  <line x1="326" y1="286" x2="326" y2="310" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="234" y="312" width="184" height="52" class="out"/>
+  <text x="326" y="334" class="ot">usf_scene.fbx</text>
+  <text x="326" y="352" class="ndt">Autodesk FBX SDK 原生导出</text>
+
+  <!-- Maya 链 -->
+  <rect x="464" y="62" width="170" height="52" class="nd"/>
+  <text x="549" y="84" class="nt">中间产物 OBJ</text>
+  <text x="549" y="102" class="ndt">上阶段网格</text>
+  <line x1="634" y1="88" x2="666" y2="88" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="668" y="62" width="184" height="52" class="cmd"/>
+  <text x="760" y="84" class="cmdt" text-anchor="middle">mayapy.exe</text>
+  <text x="760" y="102" class="cmdt" text-anchor="middle" style="font-size:10px;">&lt;obj_to_fbx.py&gt;</text>
+  <line x1="760" y1="114" x2="760" y2="138" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="668" y="140" width="184" height="64" class="nd"/>
+  <text x="760" y="162" class="nt">独立 Python 解释器</text>
+  <text x="760" y="179" class="ndt">脚本首行初始化:</text>
+  <text x="760" y="194" class="cmdt" text-anchor="middle" style="font-size:10px;">maya.standalone.initialize()</text>
+  <line x1="760" y1="204" x2="760" y2="228" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="668" y="230" width="184" height="56" class="nd"/>
+  <text x="760" y="251" class="nt">stdout 直连回传</text>
+  <text x="760" y="268" class="ndt">[USF] 标签协议</text>
+  <text x="760" y="282" class="ndt">进度实时可见</text>
+  <line x1="760" y1="286" x2="760" y2="310" stroke="#2563eb" stroke-width="1.8" marker-end="url(#m6a)"/>
+  <rect x="668" y="312" width="184" height="52" class="out"/>
+  <text x="760" y="334" class="ot">usf_scene.fbx</text>
+  <text x="760" y="352" class="ndt">OpenMaya / FBX 插件导出</text>
+
+  <!-- 中间说明 -->
+  <rect x="426" y="150" width="30" height="150" fill="none"/>
+  <text x="440" y="220" style="font:11px 'Segoe UI','Microsoft YaHei';" fill="#94a3b8" text-anchor="middle" transform="rotate(-90 440 225)">同源 OBJ 输入 · 异构桥接</text>
+</svg>
+<figcaption>图 6-2 · Max / Maya 无头桥接对比：3dsmaxbatch+MAXScript（结果文件回传）与 mayapy+standalone（stdout 直连）</figcaption>
+</figure>
+
+<div class="callout warn">
+  <div class="co-title">两款 Autodesk 软件的适配要点</div>
+  <b>3ds Max：</b>需 Max 2018 及以上（3dsmaxbatch 随版本提供）；「调用路径」填主程序
+  <code>3dsmax.exe</code>，桥接自动定位同目录 <code>3dsmaxbatch.exe</code>。<br>
+  <b>Maya：</b>「调用路径」优先填 <code>bin\mayapy.exe</code>（无头解释器），
+  填 <code>maya.exe</code> 亦可——桥接会自动尝试推导同目录 mayapy。
+  两款软件均为<b>许可制</b>：未激活时该级快速失败、自动降级到下一顺位。
+</div>
+
+<h3>Metashape 修复与 UE5 推流链路</h3>
+
+<p>流水线后段的两款特种软件各司其职：Metashape Pro 负责<b>第 7 阶段洞穴修复</b>
+（基于其专业版脚本 API），UE5 负责把最终资产<b>直接推送进引擎工程</b>。下图展示两条链路：</p>
+
+<figure>
+<svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="u6a" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="u6v" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#6d28d9"/>
+    </marker>
+  </defs>
+  <style>
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .nt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .ndt{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;text-anchor:middle;}
+    .cmd{fill:#0f1b2d;rx:6;}
+    .cmdt{font:11px Consolas,monospace;fill:#7dd3fc;}
+    .lic{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.2;rx:8;}
+    .lt{font:11px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+    .out{fill:#dcfce7;stroke:#22c55e;stroke-width:1.5;rx:8;}
+    .ot{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .ue{fill:#ede9fe;stroke:#6d28d9;stroke-width:1.5;rx:8;}
+    .ut{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#6d28d9;text-anchor:middle;}
+  </style>
+
+  <!-- 上排：Metashape 修复链 -->
+  <rect x="14" y="30" width="150" height="52" class="nd"/>
+  <text x="89" y="52" class="nt">重建网格 OBJ</text>
+  <text x="89" y="70" class="ndt">含孔洞/破面</text>
+  <line x1="164" y1="56" x2="196" y2="56" stroke="#2563eb" stroke-width="1.8" marker-end="url(#u6a)"/>
+  <rect x="198" y="30" width="230" height="52" class="cmd"/>
+  <text x="313" y="52" class="cmdt" text-anchor="middle">metashape.exe -r repair_mesh.py</text>
+  <text x="313" y="70" class="cmdt" text-anchor="middle" style="font-size:10px;">params.json 参数注入 · 无头运行</text>
+  <line x1="428" y1="56" x2="460" y2="56" stroke="#2563eb" stroke-width="1.8" marker-end="url(#u6a)"/>
+  <rect x="462" y="30" width="190" height="52" class="out"/>
+  <text x="557" y="52" class="ot">修复后网格</text>
+  <text x="557" y="70" class="ndt">孔洞封闭 · 交叠面清理</text>
+  <rect x="664" y="30" width="202" height="52" class="lic"/>
+  <text x="765" y="52" class="lt">需 Professional 授权</text>
+  <text x="765" y="70" class="ndt">Standard 版无脚本 API · 无授权自动跳过</text>
+
+  <!-- 下排：UE5 推流链 -->
+  <rect x="14" y="180" width="150" height="52" class="nd"/>
+  <text x="89" y="202" class="nt">FBX / OBJ</text>
+  <text x="89" y="220" class="ndt">最终导出产物</text>
+  <line x1="164" y1="206" x2="196" y2="206" stroke="#6d28d9" stroke-width="1.8" marker-end="url(#u6v)"/>
+  <rect x="198" y="180" width="230" height="52" class="cmd"/>
+  <text x="313" y="202" class="cmdt" text-anchor="middle">UnrealEditor-Cmd.exe</text>
+  <text x="313" y="220" class="cmdt" text-anchor="middle" style="font-size:10px;">-run=pythonscript -script=…</text>
+  <line x1="428" y1="206" x2="460" y2="206" stroke="#6d28d9" stroke-width="1.8" marker-end="url(#u6v)"/>
+  <rect x="462" y="180" width="190" height="52" class="ue"/>
+  <text x="557" y="202" class="ut">/Game/USF 目录</text>
+  <text x="557" y="220" class="ndt">静态网格资产自动导入</text>
+  <line x1="652" y1="206" x2="684" y2="206" stroke="#6d28d9" stroke-width="1.8" marker-end="url(#u6v)"/>
+  <rect x="686" y="180" width="180" height="52" class="out"/>
+  <text x="776" y="202" class="ot">.uasset 自动保存</text>
+  <text x="776" y="220" class="ndt">打开工程即可直接使用</text>
+
+  <!-- 中间连接：修复产物进入导出 -->
+  <line x1="557" y1="82" x2="557" y2="106" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <text x="557" y="104" class="ndt">修复后的网格回流导出管线</text>
+  <line x1="89" y1="82" x2="89" y2="106" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <line x1="89" y1="106" x2="530" y2="106" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <line x1="530" y1="106" x2="530" y2="128" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <line x1="530" y1="128" x2="89" y2="128" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <line x1="89" y1="128" x2="89" y2="150" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5,4"/>
+  <text x="310" y="122" class="ndt">（第 8 阶段导出前，修复网格替换原始网格）</text>
+
+  <!-- UE5 前置条件说明 -->
+  <rect x="14" y="252" width="852" height="56" fill="#fbfdff" stroke="#dbe4f0" rx="8"/>
+  <text x="34" y="274" style="font:bold 12px 'Segoe UI','Microsoft YaHei';" fill="#0f1b2d">UE5 推流前置条件</text>
+  <text x="34" y="294" style="font:11.5px 'Segoe UI','Microsoft YaHei';" fill="#5b6b83">目标工程须启用 <tspan style="fill:#7c3aed;">Python Editor Script Plugin</tspan>（编辑器内 Edit → Plugins → 搜索 Python）；「调用路径」填 <tspan style="font-family:Consolas;">UnrealEditor-Cmd.exe</tspan>，或填 UnrealEditor.exe 由桥接自动推导。</text>
+</svg>
+<figcaption>图 6-3 · Metashape Pro 洞穴修复（需授权，缺省跳过）与 UE5 工程推流（/Game/USF → .uasset）链路</figcaption>
+</figure>
+
+<div class="callout">
+  <div class="co-title">状态探测类软件（ZBrush / Modo / Mudbox / Substance / Toolbag / Rhino）</div>
+  六款软件当前提供<b>探测 + 路径管理</b>能力（指示灯与第 7 章手动路径均可用），
+  深度桥接为后续版本规划：ZBrush/Modo/Mudbox 面向<b>雕刻与重拓扑</b>环节，
+  Substance 面向<b>纹理烘焙</b>，Toolbag 面向<b>实时渲染展示</b>，Rhino 面向 <b>CAD/NURBS</b> 转换。
+  提前在「调用路径」中登记安装位置，后续版本升级后即可零配置接入。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s7">
+<h2><span class="no">7</span>调用路径设置</h2>
+
+<p>面向<b>安装位置非标准</b>（便携版、绿色解压版、多版本共存）的场景，USF 提供
+「项目调用路径」对话框：为任意 DCC 软件手动指定可执行文件路径，
+<b>手动路径优先级最高</b>，留空则回退三级自动探测。</p>
+
+<h3>操作步骤</h3>
+<ol class="steps">
+  <li><b>打开对话框</b><br>
+    菜单栏 <b>设置(S) → 软件调用路径…</b>（标准入口），或点击主界面左侧
+    <kbd>调用路径设置</kbd> 快捷按钮——两者打开同一对话框。</li>
+  <li><b>查看自动探测结果</b><br>表格第二列显示当前三级探测命中的完整 exe 路径（显示「未检测到」即三级探测全部落空）。</li>
+  <li><b>手动指定路径</b><br>在第三列输入框中填写（或点击 <kbd>浏览…</kbd> 选择）该软件的调用入口，例如：
+    <table style="margin-top:10px;">
+      <tr><th>软件</th><th>应选择的 exe</th></tr>
+      <tr><td>Houdini</td><td class="mono">…\Houdini XX.X\bin\hython.exe</td></tr>
+      <tr><td>Cinema 4D</td><td class="mono">…\Maxon Cinema 4D RXX\Commandline.exe</td></tr>
+      <tr><td>Blender</td><td class="mono">blender 根目录下 blender.exe</td></tr>
+      <tr><td>UE5</td><td class="mono">…\Engine\Binaries\Win64\UnrealEditor-Cmd.exe</td></tr>
+    </table>
+  </li>
+  <li><b>保存并重新探测</b><br>点击 <kbd>保存并重新探测</kbd>，设置立即写入 <code>settings.json</code>，
+    主窗口指示灯矩阵自动刷新。也可用 <kbd>清除</kbd> 恢复单个软件自动探测，
+    或 <kbd>全部恢复自动</kbd> 清空所有手动路径。</li>
+</ol>
+
+<div class="callout warn">
+  <div class="co-title">注意</div>
+  指定的路径必须是<b>可执行文件本体</b>而非快捷方式（.lnk）。
+  Houdini 请选择 <code>hython.exe</code>（无头 Python），Cinema 4D 请选择 <code>Commandline.exe</code>；
+  选择交互式主程序会导致无头调用失败。
+</div>
+
+<h3>典型场景</h3>
+<table>
+  <tr><th>场景</th><th>做法</th></tr>
+  <tr><td>Blender 官方便携版解压到 D 盘</td><td>手动指定 <code>D:\blender-4.1\blender.exe</code></td></tr>
+  <tr><td>同时装了 Houdini 20.0 与 20.5</td><td>指定想用的版本 <code>…\Houdini 20.5\bin\hython.exe</code></td></tr>
+  <tr><td>Steam 版软件</td><td>自动探测已覆盖 Steam 库；若装在自定义库且探测不到，手动指定即可</td></tr>
+  <tr><td>公司网络无外网（自动安装失败）</td><td>手动下载便携版解压后，在此处指定路径</td></tr>
+</table>
+
+<h3>C4D 与 Houdini 调用实操图解</h3>
+
+<p>两款次世代软件的无头桥接入口与常规 DCC 不同——C4D 需要主程序路径（桥接自动推导
+Commandline.exe），Houdini 需要专用的 hython 解释器。下图演示典型配置过程：</p>
+
+<figure>
+<svg viewBox="0 0 880 560" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="p1" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .win{fill:#fff;stroke:#94a3b8;stroke-width:1.5;rx:10;}
+    .tb{fill:#0f1b2d;rx:10;}
+    .tt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .hint{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;}
+    .th{font:bold 11.5px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .row{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#1a2332;}
+    .path{font:10.5px Consolas,monospace;fill:#334155;}
+    .hl{fill:#fff7ed;stroke:#f59e0b;stroke-width:1.5;rx:6;}
+    .hl2{fill:#eef6ff;stroke:#2563eb;stroke-width:1.5;rx:6;}
+    .lnk{stroke:#e2e8f0;stroke-width:1;}
+    .btn{fill:#eef2f8;stroke:#cbd5e1;rx:5;}
+    .bt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;text-anchor:middle;}
+    .btnp{fill:#2563eb;rx:5;}
+    .btp{font:bold 11px 'Segoe UI','Microsoft YaHei';fill:#fff;text-anchor:middle;}
+    .note{font:11px 'Segoe UI','Microsoft YaHei';fill:#7c3aed;}
+    .ok{fill:#dcfce7;}
+  </style>
+
+  <!-- 对话框窗口 -->
+  <rect x="1" y="1" width="878" height="558" class="win"/>
+  <rect x="1" y="1" width="878" height="32" class="tb"/>
+  <text x="16" y="22" class="tt">项目调用路径设置</text>
+  <text x="864" y="22" style="font:11px 'Segoe UI';" fill="#9fb3d1" text-anchor="end">✕</text>
+
+  <text x="18" y="56" class="hint">留空 = 三级自动探测（环境变量 → 注册表 → 常见安装路径/Steam 库）；手动指定的路径优先级最高。</text>
+
+  <!-- 表格 -->
+  <rect x="18" y="70" width="844" height="420" fill="#fff" stroke="#e2e8f0" rx="6"/>
+  <!-- 表头 -->
+  <rect x="18" y="70" width="844" height="26" fill="#f0f4fa" rx="6"/>
+  <text x="30" y="87" class="th">软件</text>
+  <text x="180" y="87" class="th">自动探测结果</text>
+  <text x="470" y="87" class="th">手动指定调用路径（留空 = 自动）</text>
+
+  <!-- 行1 Blender -->
+  <line x1="18" y1="118" x2="862" y2="118" class="lnk"/>
+  <text x="30" y="108" class="row">Blender</text>
+  <text x="180" y="108" class="path">d:\…\steamapps\common\Blender\blender.exe</text>
+  <rect x="470" y="97" width="280" height="18" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="110" style="font:10px Consolas;fill:#94a3b8;">自动</text>
+  <rect x="756" y="97" width="46" height="18" class="btn"/><text x="779" y="110" class="bt">浏览…</text>
+  <rect x="806" y="97" width="40" height="18" class="btn"/><text x="826" y="110" class="bt">清除</text>
+
+  <!-- 行2 3ds Max -->
+  <line x1="18" y1="154" x2="862" y2="154" class="lnk"/>
+  <text x="30" y="144" class="row">Autodesk 3ds Max</text>
+  <text x="180" y="144" class="path">D:\Autodesk\3ds Max 2026\3dsmax.exe</text>
+  <rect x="470" y="133" width="280" height="18" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="146" style="font:10px Consolas;fill:#94a3b8;">自动</text>
+
+  <!-- 行3 ZBrush -->
+  <line x1="18" y1="190" x2="862" y2="190" class="lnk"/>
+  <text x="30" y="180" class="row">Maxon ZBrush</text>
+  <text x="180" y="180" class="path" style="fill:#94a3b8;">未检测到</text>
+  <rect x="470" y="169" width="280" height="18" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="182" style="font:10px Consolas;fill:#94a3b8;">自动</text>
+
+  <!-- 行4 Houdini 高亮 -->
+  <rect x="20" y="192" width="840" height="36" class="hl"/>
+  <line x1="18" y1="228" x2="862" y2="228" class="lnk"/>
+  <text x="30" y="214" class="row" style="font-weight:bold;">SideFX Houdini (hython)</text>
+  <text x="180" y="214" class="path" style="fill:#94a3b8;">未检测到</text>
+  <rect x="470" y="197" width="280" height="22" fill="#fff" stroke="#f59e0b" rx="3"/>
+  <text x="476" y="212" class="path">D:\Houdini 20.5.370\bin\hython.exe</text>
+  <rect x="756" y="197" width="46" height="22" class="btn"/><text x="779" y="212" class="bt">浏览…</text>
+  <rect x="806" y="197" width="40" height="22" class="btn"/><text x="826" y="212" class="bt">清除</text>
+  <text x="472" y="245" class="note">① 选 bin 目录下的 hython.exe（无头解释器），不要选 houdinifx.exe 主程序</text>
+
+  <!-- 行5 C4D 高亮 -->
+  <rect x="20" y="254" width="840" height="36" class="hl2"/>
+  <line x1="18" y1="290" x2="862" y2="290" class="lnk"/>
+  <text x="30" y="276" class="row" style="font-weight:bold;">Maxon Cinema 4D</text>
+  <text x="180" y="276" class="path">C:\Program Files\Maxon Cinema 4D 2025\Cinema 4D.exe</text>
+  <rect x="470" y="259" width="280" height="22" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="274" style="font:10px Consolas;fill:#94a3b8;">自动（探测成功，留空即可）</text>
+  <text x="472" y="307" class="note">② 指定主程序 Cinema 4D.exe——桥接会自动调用同目录 Commandline.exe；不要直接填 Commandline.exe</text>
+
+  <!-- 行6-13 省略 -->
+  <line x1="18" y1="326" x2="862" y2="326" class="lnk"/>
+  <text x="30" y="345" class="row" style="fill:#94a3b8;">Modo / Mudbox / Substance / Marmoset / Rhino / Metashape / UE5 …（其余 7 行同结构）</text>
+
+  <!-- 底部按钮 -->
+  <rect x="600" y="480" width="110" height="30" class="btn"/><text x="655" y="499" class="bt">全部恢复自动</text>
+  <rect x="718" y="480" width="144" height="30" class="btnp"/><text x="790" y="499" class="btp">保存并重新探测</text>
+  <text x="20" y="499" class="note">③ 保存后指示灯矩阵立即刷新：Houdini 变绿即生效</text>
+
+  <!-- 标注箭头 -->
+  <path d="M 460 212 L 440 212" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#p1)"/>
+  <text x="436" y="196" class="note" text-anchor="end">填错版本时手动改这里</text>
+</svg>
+<figcaption>图 7-1 · 「调用路径设置」对话框实操：Houdini 手动指定 hython.exe，C4D 探测成功留空（或手动指定主程序）</figcaption>
+</figure>
+
+<p>保存路径后，两款软件在 FBX 降级链中的工作方式如下：</p>
+
+<figure>
+<svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="p2" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <style>
+    .lane{fill:#fff;stroke:#cbd5e1;stroke-width:1.3;rx:10;}
+    .lt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#64748b;letter-spacing:2px;}
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .nt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .ndt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .cmd{font:10px Consolas,monospace;fill:#7c3aed;text-anchor:middle;}
+    .pr{font:10px Consolas,monospace;fill:#0891b2;text-anchor:middle;}
+    .out{fill:#f0fdf4;stroke:#22c55e;stroke-width:1.4;rx:8;}
+    .ot{font:bold 11.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .fl{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.2;rx:8;}
+    .ft{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+  </style>
+
+  <!-- C4D 泳道 -->
+  <rect x="14" y="14" width="420" height="372" class="lane"/>
+  <text x="30" y="40" class="lt">CINEMA 4D 桥接（降级链第 5 级）</text>
+
+  <rect x="34" y="56" width="180" height="52" class="nd"/>
+  <text x="124" y="78" class="nt">① Cinema 4D.exe</text>
+  <text x="124" y="96" class="ndt">调用路径设置中指定/探测</text>
+
+  <line x1="124" y1="108" x2="124" y2="126" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="34" y="128" width="180" height="52" class="nd"/>
+  <text x="124" y="150" class="nt">② 推导 Commandline.exe</text>
+  <text x="124" y="168" class="ndt">同目录官方无头批处理入口</text>
+
+  <line x1="124" y1="180" x2="124" y2="198" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="34" y="200" width="180" height="52" class="nd"/>
+  <text x="124" y="222" class="nt">③ 注入参数脚本</text>
+  <text x="124" y="240" class="cmd">-script=usf_xxx.py</text>
+
+  <line x1="214" y1="226" x2="240" y2="226" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="242" y="200" width="172" height="52" class="nd"/>
+  <text x="328" y="222" class="nt">④ 无头执行</text>
+  <text x="328" y="240" class="cmd">LoadFile → SaveDocument</text>
+
+  <rect x="242" y="56" width="172" height="116" class="fl"/>
+  <text x="328" y="80" class="ft">运行期协议回传</text>
+  <text x="328" y="102" class="pr">[USF] PROGRESS 20</text>
+  <text x="328" y="120" class="pr">[USF] PROGRESS 55</text>
+  <text x="328" y="138" class="pr">[USF] FILE x.fbx</text>
+  <text x="328" y="156" class="pr">[USF] DONE</text>
+
+  <rect x="34" y="276" width="380" height="56" class="out"/>
+  <text x="224" y="298" class="ot">⑤ usf_scene.fbx</text>
+  <text x="224" y="318" class="ndt">无授权时快速失败并降级记录, 不阻塞主流程</text>
+
+  <!-- Houdini 泳道 -->
+  <rect x="446" y="14" width="420" height="372" class="lane"/>
+  <text x="462" y="40" class="lt">HOUDINI 桥接（降级链第 4 级）</text>
+
+  <rect x="466" y="56" width="180" height="52" class="nd"/>
+  <text x="556" y="78" class="nt">① hython.exe</text>
+  <text x="556" y="96" class="ndt">bin 目录下的无头 Python</text>
+
+  <line x1="556" y1="108" x2="556" y2="126" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="466" y="128" width="180" height="52" class="nd"/>
+  <text x="556" y="150" class="nt">② 执行转换脚本</text>
+  <text x="556" y="168" class="cmd">hython usf_xxx.py</text>
+
+  <line x1="646" y1="154" x2="672" y2="154" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="674" y="128" width="172" height="52" class="nd"/>
+  <text x="760" y="150" class="nt">③ /obj 网络组装</text>
+  <text x="760" y="168" class="ndt">geo/file 节点导入 OBJ</text>
+
+  <rect x="466" y="200" width="180" height="52" class="nd"/>
+  <text x="556" y="222" class="nt">④ FBX ROP 渲染</text>
+  <text x="556" y="240" class="ndt">rop_filmbox 跨版本兼容枚举</text>
+
+  <line x1="556" y1="252" x2="556" y2="270" stroke="#2563eb" stroke-width="1.8" marker-end="url(#p2)"/>
+  <rect x="674" y="200" width="172" height="52" class="fl"/>
+  <text x="760" y="224" class="ft">超时看门狗 30 分钟</text>
+  <text x="760" y="242" class="ft">进度经 [USF] 标签回传</text>
+
+  <rect x="466" y="276" width="380" height="56" class="out"/>
+  <text x="656" y="298" class="ot">⑤ usf_scene.fbx</text>
+  <text x="656" y="318" class="ndt">HFS 环境变量亦可替代手动路径指定</text>
+</svg>
+<figcaption>图 7-2 · C4D / Houdini 无头桥接工作流：参数注入 → 无头执行 → 协议回传 → FBX 产物</figcaption>
+</figure>
+
+<div class="callout warn">
+  <div class="co-title">两款软件的路径填写要点</div>
+  <b>Cinema 4D：</b>填主程序 <code>Cinema 4D.exe</code>（桥接自动推导同目录 Commandline.exe）；
+  需要本机已完成授权，无授权时该级快速失败、自动跳过。<br>
+  <b>Houdini：</b>填 <code>bin\hython.exe</code> 无头解释器（交互主程序 houdinifx.exe 无法用于批处理）；
+  已设置 <code>HFS</code> 环境变量的机器可不填，自动探测会命中。
+</div>
+
+<h3>3D-Coat、RizomUV 与 TopoGun 接入图解</h3>
+
+<p>三款「扩展 II」软件与既有软件共用同一个调用路径设置对话框，滚动到底部即可看到新增的三行条目。
+它们的安装形态多样（安装器 / 便携版 / 自定义目录），三级探测未命中时用「浏览…」手动指定即可。
+下图演示三种典型状态——注册表命中、环境变量命中、便携版手动指定：</p>
+
+<figure>
+<svg viewBox="0 0 880 560" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="p3" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <style>
+    .g3win{fill:#fff;stroke:#94a3b8;stroke-width:1.5;rx:10;}
+    .g3tb{fill:#0f1b2d;}
+    .g3tt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .g3hint{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;}
+    .g3th{font:bold 11.5px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .g3row{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#1a2332;}
+    .g3path{font:10.5px Consolas,monospace;fill:#334155;}
+    .g3hl{fill:#fff7ed;stroke:#f59e0b;stroke-width:1.5;rx:6;}
+    .g3hl2{fill:#eef6ff;stroke:#2563eb;stroke-width:1.5;rx:6;}
+    .g3lnk{stroke:#e2e8f0;stroke-width:1;}
+    .g3btn{fill:#eef2f8;stroke:#cbd5e1;rx:5;}
+    .g3bt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;text-anchor:middle;}
+    .g3btnp{fill:#2563eb;rx:5;}
+    .g3btp{font:bold 11px 'Segoe UI','Microsoft YaHei';fill:#fff;text-anchor:middle;}
+    .g3note{font:11px 'Segoe UI','Microsoft YaHei';fill:#7c3aed;}
+    .g3tag{fill:#dcfce7;rx:4;}
+    .g3tagt{font:9.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;}
+    .g3tagb{fill:#e0edff;rx:4;}
+    .g3tagbt{font:9.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;}
+  </style>
+
+  <rect x="1" y="1" width="878" height="558" class="g3win"/>
+  <rect x="1" y="1" width="878" height="32" class="g3tb"/>
+  <text x="16" y="22" class="g3tt">项目调用路径设置（滚动到底部 · 扩展 II 区段）</text>
+  <text x="864" y="22" style="font:11px 'Segoe UI';" fill="#9fb3d1" text-anchor="end">✕</text>
+
+  <text x="18" y="56" class="g3hint">三级探测：环境变量 → 注册表 → 常见安装路径；命中任一级即绿灯，留空即采用探测结果。</text>
+
+  <!-- 表格 -->
+  <rect x="18" y="70" width="844" height="380" fill="#fff" stroke="#e2e8f0" rx="6"/>
+  <rect x="18" y="70" width="844" height="26" fill="#f0f4fa" rx="6"/>
+  <text x="30" y="87" class="g3th">软件</text>
+  <text x="180" y="87" class="g3th">自动探测结果</text>
+  <text x="470" y="87" class="g3th">手动指定调用路径（留空 = 自动）</text>
+
+  <!-- 前 13 行折叠 -->
+  <line x1="18" y1="118" x2="862" y2="118" class="g3lnk"/>
+  <text x="30" y="108" class="g3row" style="fill:#94a3b8;">Blender / 3ds Max / Maya / Houdini / Cinema 4D / ZBrush …（前 13 行同结构，见图 7-1）</text>
+
+  <!-- 行1 3D-Coat: 注册表命中 -->
+  <rect x="20" y="120" width="840" height="42" class="g3hl2"/>
+  <line x1="18" y1="162" x2="862" y2="162" class="g3lnk"/>
+  <text x="30" y="145" class="g3row" style="font-weight:bold;">3D-Coat</text>
+  <text x="180" y="139" class="g3path">C:\Program FilesD-Coat 2024.26D-Coat.exe</text>
+  <rect x="180" y="146" width="118" height="14" class="g3tag"/>
+  <text x="188" y="157" class="g3tagt">来源：注册表 Pilgway</text>
+  <rect x="470" y="131" width="280" height="20" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="145" style="font:10px Consolas;fill:#94a3b8;">自动（探测成功，留空即可）</text>
+  <rect x="756" y="131" width="46" height="20" class="g3btn"/><text x="779" y="145" class="g3bt">浏览…</text>
+  <text x="30" y="178" class="g3note">① 安装器版本通常由注册表命中；Steam 版与便携版见下方 RizomUV 行的手动指定方式</text>
+
+  <!-- 行2 RizomUV: 未命中, 手动指定 -->
+  <rect x="20" y="184" width="840" height="42" class="g3hl"/>
+  <line x1="18" y1="226" x2="862" y2="226" class="g3lnk"/>
+  <text x="30" y="209" class="g3row" style="font-weight:bold;">RizomUV</text>
+  <text x="180" y="209" class="g3path" style="fill:#94a3b8;">未检测到</text>
+  <rect x="470" y="195" width="280" height="20" fill="#fff" stroke="#f59e0b" rx="3"/>
+  <text x="476" y="209" class="g3path">D:\Rizom Lab\RizomUV 2024.1
+izomuv.exe</text>
+  <rect x="756" y="195" width="46" height="20" class="g3btn"/><text x="779" y="209" class="g3bt">浏览…</text>
+  <rect x="806" y="195" width="40" height="20" class="g3btn"/><text x="826" y="209" class="g3bt">清除</text>
+  <text x="30" y="242" class="g3note">② 便携版 / 自定义目录探测不到时用「浏览…」定位 rizomuv.exe（注意文件名全小写）</text>
+
+  <!-- 行3 TopoGun: 环境变量命中 -->
+  <rect x="20" y="248" width="840" height="42" class="g3hl2"/>
+  <line x1="18" y1="290" x2="862" y2="290" class="g3lnk"/>
+  <text x="30" y="273" class="g3row" style="font-weight:bold;">TopoGun</text>
+  <text x="180" y="267" class="g3path">D:\TopoGun 3\TopoGun.exe</text>
+  <rect x="180" y="274" width="152" height="14" class="g3tagb"/>
+  <text x="188" y="285" class="g3tagbt">来源：环境变量 TOPOGUN_PATH</text>
+  <rect x="470" y="259" width="280" height="20" fill="#fff" stroke="#cbd5e1" rx="3"/>
+  <text x="476" y="273" style="font:10px Consolas;fill:#94a3b8;">自动（探测成功，留空即可）</text>
+  <rect x="756" y="259" width="46" height="20" class="g3btn"/><text x="779" y="273" class="g3bt">浏览…</text>
+  <text x="30" y="306" class="g3note">③ 环境变量优先级最高：设 TOPOGUN_PATH=D:\TopoGun 3 后无需任何手动配置</text>
+
+  <!-- 图例说明 -->
+  <line x1="18" y1="322" x2="862" y2="322" class="g3lnk"/>
+  <text x="30" y="344" class="g3hint">未安装三款软件时此处显示灰灯，不影响流水线任何其他环节；</text>
+  <text x="30" y="364" class="g3hint">手动指定的路径会写入 settings.json（coat_exe / rizomuv_exe / topogun_exe），重启后仍生效。</text>
+  <text x="30" y="384" class="g3hint">本机若未安装，可通过「浏览…」任意指定——路径校验只要求 .exe 存在。</text>
+
+  <!-- 底部按钮 -->
+  <rect x="600" y="480" width="110" height="30" class="g3btn"/><text x="655" y="499" class="g3bt">全部恢复自动</text>
+  <rect x="718" y="480" width="144" height="30" class="g3btnp"/><text x="790" y="499" class="g3btp">保存并重新探测</text>
+  <text x="20" y="499" class="g3note">④ 保存后指示灯矩阵立即刷新：对应行变绿即生效</text>
+
+  <path d="M 460 209 L 440 209" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#p3)"/>
+  <text x="436" y="193" class="g3note" text-anchor="end">便携版手动填这里</text>
+</svg>
+<figcaption>图 7-3 · 扩展 II 软件的三种典型配置状态：注册表命中（3D-Coat）、便携版手动指定（RizomUV）、环境变量命中（TopoGun）</figcaption>
+</figure>
+
+<p>三款软件在次世代建模流水线中的角色与当前接入状态如下图——本版本提供<b>探测与路径管理</b>
+（绿灯即就绪），深度桥接（网格一键推送与自动回传）将在后续版本接入：</p>
+
+<figure>
+<svg viewBox="0 0 880 440" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="p4" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <style>
+    .g3out{fill:#f0fdf4;stroke:#22c55e;stroke-width:1.4;rx:8;}
+    .g3ot{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .g3odt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .g3lane{fill:#fff;stroke:#cbd5e1;stroke-width:1.3;rx:10;}
+    .g3lt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#64748b;letter-spacing:2px;}
+    .g3nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .g3nt{font:bold 11.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .g3ndt{font:10px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .g3fl{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.2;rx:8;}
+    .g3ft{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+    .g3okp{fill:#dcfce7;rx:9;}
+    .g3okpt{font:bold 10px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .g3fup{fill:#fff;stroke:#f59e0b;stroke-dasharray:4 3;stroke-width:1.2;rx:9;}
+    .g3fupt{font:10px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+    .g3flow{stroke:#2563eb;stroke-width:1.8;fill:none;}
+  </style>
+
+  <!-- 顶部产物节点 -->
+  <rect x="240" y="16" width="400" height="56" class="g3out"/>
+  <text x="440" y="40" class="g3ot">usf_scene.obj · 高精网格 + LOD1/2</text>
+  <text x="440" y="58" class="g3odt">流水线第 6 阶段泊松重建产物（顶点色网格）</text>
+
+  <!-- 分流箭头 -->
+  <path d="M 440 72 C 440 92, 148 80, 148 106" class="g3flow" marker-end="url(#p4)"/>
+  <path d="M 440 72 L 440 106" class="g3flow" marker-end="url(#p4)"/>
+  <path d="M 440 72 C 440 92, 732 80, 732 106" class="g3flow" marker-end="url(#p4)"/>
+
+  <!-- 泳道1 3D-Coat -->
+  <rect x="14" y="108" width="268" height="252" class="g3lane"/>
+  <text x="30" y="134" class="g3lt">3D-COAT</text>
+  <rect x="30" y="146" width="236" height="64" class="g3nd"/>
+  <text x="148" y="170" class="g3nt">体素雕刻 · 表面重拓扑 · UV</text>
+  <text x="148" y="188" class="g3ndt">Voxel / Surface 双模式</text>
+  <text x="148" y="203" class="g3ndt">高模减面与细节保留</text>
+  <rect x="30" y="222" width="236" height="46" class="g3fl"/>
+  <text x="148" y="241" class="g3ft">产物：低模 FBX + 烘焙源高模</text>
+  <text x="148" y="258" class="g3ft">（ Rooms 工作区划分 ）</text>
+  <rect x="30" y="282" width="128" height="22" class="g3okp"/>
+  <text x="94" y="297" class="g3okpt">路径探测 · 已就绪</text>
+  <rect x="166" y="282" width="100" height="22" class="g3fup"/>
+  <text x="216" y="297" class="g3fupt">深度桥接 · 待接入</text>
+  <text x="148" y="330" class="g3ndt" style="fill:#94a3b8;">填充完路径后绿灯常亮</text>
+  <text x="148" y="346" class="g3ndt" style="fill:#94a3b8;">可手动启动加工流程</text>
+
+  <!-- 泳道2 TopoGun -->
+  <rect x="306" y="108" width="268" height="252" class="g3lane"/>
+  <text x="322" y="134" class="g3lt">TOPOGUN</text>
+  <rect x="322" y="146" width="236" height="64" class="g3nd"/>
+  <text x="440" y="170" class="g3nt">重拓扑 · 法线 / ID 烘焙</text>
+  <text x="440" y="188" class="g3ndt">对称工具与参考面约束</text>
+  <text x="440" y="203" class="g3ndt">高模 → 低模贴图烘焙</text>
+  <rect x="322" y="222" width="236" height="46" class="g3fl"/>
+  <text x="440" y="241" class="g3ft">产物：低模 OBJ + 法线/ID 贴图</text>
+  <text x="440" y="258" class="g3ft">（ 环绕包裹式烘焙 ）</text>
+  <rect x="322" y="282" width="128" height="22" class="g3okp"/>
+  <text x="386" y="297" class="g3okpt">路径探测 · 已就绪</text>
+  <rect x="458" y="282" width="100" height="22" class="g3fup"/>
+  <text x="508" y="297" class="g3fupt">深度桥接 · 待接入</text>
+  <text x="440" y="330" class="g3ndt" style="fill:#94a3b8;">2.x / 3.x 均可探测</text>
+  <text x="440" y="346" class="g3ndt" style="fill:#94a3b8;">TOPOGUN_PATH 免配置</text>
+
+  <!-- 泳道3 RizomUV -->
+  <rect x="598" y="108" width="268" height="252" class="g3lane"/>
+  <text x="614" y="134" class="g3lt">RIZOMUV</text>
+  <rect x="614" y="146" width="236" height="64" class="g3nd"/>
+  <text x="732" y="170" class="g3nt">专业 UV 展开 · 打包</text>
+  <text x="732" y="188" class="g3ndt">VS 虚拟空间 / RS 真实空间</text>
+  <text x="732" y="203" class="g3ndt">自动切缝与 Texel 均匀化</text>
+  <rect x="614" y="222" width="236" height="46" class="g3fl"/>
+  <text x="732" y="241" class="g3ft">产物：带 UV 网格（FBX/OBJ）</text>
+  <text x="732" y="258" class="g3ft">（ UDIM / 单 UDIM 布局 ）</text>
+  <rect x="614" y="282" width="128" height="22" class="g3okp"/>
+  <text x="678" y="297" class="g3okpt">路径探测 · 已就绪</text>
+  <rect x="750" y="282" width="100" height="22" class="g3fup"/>
+  <text x="800" y="297" class="g3fupt">深度桥接 · 待接入</text>
+  <text x="732" y="330" class="g3ndt" style="fill:#94a3b8;">VS / RS 双版本通用</text>
+  <text x="732" y="346" class="g3ndt" style="fill:#94a3b8;">RIZOMUV_PATH 免配置</text>
+
+  <!-- 底部说明条 -->
+  <rect x="14" y="376" width="852" height="50" fill="#f0f4fa" rx="8"/>
+  <text x="440" y="398" class="g3ndt" style="font-weight:bold;fill:#1a2332;">当前版本：绿灯即代表路径就绪，可手动启动软件加工；深度桥接上线后网格产物将一键推送并自动回传，</text>
+  <text x="440" y="416" class="g3ndt" style="font-weight:bold;fill:#1a2332;">已保存的路径配置直接生效，无需重新设置。</text>
+</svg>
+<figcaption>图 7-4 · 三款扩展 II 软件的流水线角色与接入状态：网格产物 → 各自加工 → 产物回流（深度桥接后续版本接入）</figcaption>
+</figure>
+
+<p>深度桥接上线前，三款软件按「绿灯 → 手动启动 → 软件内加工」的方式处理 USF 产物。
+以下三图分别是各软件的<b>界面示意图</b>与标准加工步骤（以 USF 导出的
+<code>usf_scene.obj</code> 高精网格 / 减面后的低模为输入）：</p>
+
+<p><b>3D-Coat</b> —— 从高精网格到可烘焙低模（体素 / 重拓扑路线）：</p>
+
+<figure>
+<svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <style>
+    .m5win{fill:#fff;stroke:#94a3b8;stroke-width:1.5;}
+    .m5tb{fill:#0f1b2d;}
+    .m5tt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .m5menu{font:11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m5menub{fill:#f8fafc;stroke:#e2e8f0;}
+    .m5rooms{fill:#334155;}
+    .m5rm{font:10px 'Segoe UI','Microsoft YaHei';fill:#cbd5e1;text-anchor:middle;}
+    .m5rmh{fill:#f59e0b;}
+    .m5rmht{font:bold 10px 'Segoe UI','Microsoft YaHei';fill:#1a2332;text-anchor:middle;}
+    .m5vp{fill:#1e293b;}
+    .m5pt{font:bold 11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m5it{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;}
+    .m5tool{fill:#fff;stroke:#cbd5e1;}
+    .m5toolh{fill:#2563eb;stroke:#2563eb;}
+    .m5toolht{font:bold 10.5px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .m5toolt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;}
+    .m5status{fill:#f0f4fa;}
+    .m5st{font:10px Consolas,monospace;fill:#5b6b83;}
+    .m5numc{fill:#f5f3ff;stroke:#7c3aed;stroke-width:1.4;}
+    .m5num{font:bold 10.5px 'Segoe UI';fill:#7c3aed;text-anchor:middle;}
+    .m5leg{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;}
+  </style>
+
+  <rect x="1" y="1" width="878" height="372" rx="10" class="m5win"/>
+  <rect x="1" y="1" width="878" height="26" rx="10" class="m5tb"/>
+  <text x="14" y="18" class="m5tt">3D-Coat 2024 — usf_scene.obj（参考网格已导入）</text>
+
+  <!-- 菜单行 -->
+  <rect x="1" y="27" width="878" height="22" class="m5menub"/>
+  <text x="14" y="42" class="m5menu">File</text>
+  <text x="46" y="42" class="m5menu">Edit</text>
+  <text x="78" y="42" class="m5menu">View</text>
+  <text x="116" y="42" class="m5menu">Windows</text>
+  <text x="170" y="42" class="m5menu">Help</text>
+
+  <!-- 左侧 Rooms -->
+  <rect x="14" y="56" width="48" height="286" rx="6" class="m5rooms"/>
+  <text x="38" y="76" class="m5rm">Paint</text>
+  <text x="38" y="98" class="m5rm">Tweak</text>
+  <text x="38" y="120" class="m5rm">Voxel</text>
+  <text x="38" y="142" class="m5rm">Surface</text>
+  <rect x="18" y="156" width="40" height="20" rx="4" class="m5rmh"/>
+  <text x="38" y="170" class="m5rmht">Retopo</text>
+  <text x="38" y="196" class="m5rm">UV</text>
+  <text x="38" y="218" class="m5rm">Render</text>
+
+  <!-- 视口 -->
+  <rect x="68" y="56" width="628" height="286" class="m5vp"/>
+  <path d="M 300 150 L 390 120 L 470 160 L 480 240 L 400 300 L 310 270 L 280 210 Z"
+        fill="#475569" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="300" y1="150" x2="310" y2="270" stroke="#64748b"/>
+  <path d="M 300 150 L 390 120 L 400 300" fill="none" stroke="#64748b"/>
+  <path d="M 390 120 L 480 240" fill="none" stroke="#64748b"/>
+  <path d="M 310 270 L 400 300 L 480 240" fill="none" stroke="#64748b"/>
+  <text x="686" y="334" style="font:10px 'Segoe UI';fill:#64748b;" text-anchor="end">Viewport</text>
+
+  <!-- 右侧 TopTool -->
+  <rect x="702" y="56" width="164" height="286" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="714" y="76" class="m5pt">TopTool</text>
+  <rect x="712" y="88" width="144" height="20" rx="4" class="m5tool"/>
+  <text x="720" y="102" class="m5toolt">Add New Retopo Mesh</text>
+  <rect x="712" y="116" width="144" height="20" rx="4" class="m5toolh"/>
+  <text x="720" y="130" class="m5toolht">Quads / Build</text>
+  <rect x="712" y="144" width="144" height="20" rx="4" class="m5tool"/>
+  <text x="720" y="158" class="m5toolt">Auto-retopo…</text>
+  <rect x="712" y="172" width="144" height="20" rx="4" class="m5tool"/>
+  <text x="720" y="186" class="m5toolt">Symmetry: X</text>
+  <rect x="712" y="200" width="144" height="20" rx="4" class="m5toolh"/>
+  <text x="720" y="214" class="m5toolht">Bake（法线/ID/AO）</text>
+  <rect x="712" y="228" width="144" height="20" rx="4" class="m5tool"/>
+  <text x="720" y="242" class="m5toolt">Export Mesh…</text>
+
+  <!-- 状态栏 -->
+  <rect x="1" y="348" width="878" height="24" class="m5status"/>
+  <text x="12" y="364" class="m5st">参考网格 2.4M tris · 低模 0 polys · 单位: mm</text>
+
+  <!-- 步骤徽标 -->
+  <circle cx="30" cy="38" r="9" class="m5numc"/><text x="30" y="42" class="m5num">1</text>
+  <circle cx="38" cy="166" r="9" class="m5numc"/><text x="38" y="170" class="m5num">2</text>
+  <circle cx="784" cy="126" r="9" class="m5numc"/><text x="784" y="130" class="m5num">3</text>
+  <circle cx="784" cy="210" r="9" class="m5numc"/><text x="784" y="214" class="m5num">4</text>
+
+  <text x="14" y="392" class="m5leg">① File → Import 导入 OBJ   ② 切换 Retopo 房间   ③ Quads/Build 手动勾拓扑（或 Auto-retopo 自动减面）   ④ Bake 烘焙后 Export 导出</text>
+</svg>
+<figcaption>图 7-5 · 3D-Coat 界面示意图：导入参考网格 → Retopo 房间 → 搭建低模 → 烘焙导出</figcaption>
+</figure>
+
+<table>
+  <tr><th style="width:56px">步骤</th><th>操作</th><th>结果</th></tr>
+  <tr><td><b>①</b></td><td><span class="mono">File → Import → OBJ/FBX</span>，选择 USF 导出的 <code>usf_scene.obj</code></td><td>高精网格作为参考模型载入视口</td></tr>
+  <tr><td><b>②</b></td><td>左侧 Rooms 切到 <b>Retopo</b>，点 TopTool 面板 <span class="mono">Add New Retopo Mesh</span></td><td>创建低模工作区（高模自动作为包络参考）</td></tr>
+  <tr><td><b>③</b></td><td>用 <span class="mono">Quads/Build</span> 手动勾拓扑，或 <span class="mono">Auto-retopo</span> 一键自动减面（可指定目标面数）</td><td>得到布线干净、拓扑规整的低模</td></tr>
+  <tr><td><b>④</b></td><td><span class="mono">Bake</span> 烘焙法线 / ID / AO，<span class="mono">Export Mesh</span> 导出 OBJ/FBX</td><td>低模 + 贴图回流，供 UV 展开（RizomUV）或直接进下游 DCC</td></tr>
+</table>
+
+<p><b>RizomUV</b> —— 专业 UV 展开与打包：</p>
+
+<figure>
+<svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <style>
+    .m6win{fill:#fff;stroke:#94a3b8;stroke-width:1.5;}
+    .m6tb{fill:#0f1b2d;}
+    .m6tt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .m6menu{font:11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m6menub{fill:#f8fafc;stroke:#e2e8f0;}
+    .m6tbn{fill:#eef2f8;stroke:#cbd5e1;}
+    .m6tbnt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;text-anchor:middle;}
+    .m6tbh{fill:#2563eb;stroke:#2563eb;}
+    .m6tbht{font:bold 10.5px 'Segoe UI','Microsoft YaHei';fill:#fff;text-anchor:middle;}
+    .m6panel{fill:#f8fafc;stroke:#e2e8f0;}
+    .m6pt{font:bold 11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m6it{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;}
+    .m6uv{fill:#eef6ff;stroke:#2563eb;stroke-width:1.4;}
+    .m6vp{fill:#1e293b;}
+    .m6numc{fill:#f5f3ff;stroke:#7c3aed;stroke-width:1.4;}
+    .m6num{font:bold 10.5px 'Segoe UI';fill:#7c3aed;text-anchor:middle;}
+    .m6leg{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;}
+  </style>
+
+  <rect x="1" y="1" width="878" height="372" rx="10" class="m6win"/>
+  <rect x="1" y="1" width="878" height="26" rx="10" class="m6tb"/>
+  <text x="14" y="18" class="m6tt">RizomUV 2024 — usf_scene_low.obj</text>
+
+  <rect x="1" y="27" width="878" height="22" class="m6menub"/>
+  <text x="14" y="42" class="m6menu">File</text>
+  <text x="46" y="42" class="m6menu">Edit</text>
+  <text x="78" y="42" class="m6menu">Tools</text>
+  <text x="116" y="42" class="m6menu">Help</text>
+
+  <!-- 工具条 -->
+  <rect x="1" y="49" width="878" height="34" class="m6menub"/>
+  <rect x="14" y="55" width="70" height="22" rx="4" class="m6tbn"/><text x="49" y="70" class="m6tbnt">Import</text>
+  <rect x="94" y="55" width="96" height="22" rx="4" class="m6tbh"/><text x="142" y="70" class="m6tbht">Unwrap（Full）</text>
+  <rect x="200" y="55" width="112" height="22" rx="4" class="m6tbh"/><text x="256" y="70" class="m6tbht">Pack &amp; Optimize</text>
+  <rect x="322" y="55" width="70" height="22" rx="4" class="m6tbn"/><text x="357" y="70" class="m6tbnt">Export</text>
+
+  <!-- 左侧面板 -->
+  <rect x="14" y="90" width="176" height="252" rx="6" class="m6panel"/>
+  <text x="26" y="110" class="m6pt">选择模式</text>
+  <text x="34" y="128" class="m6it">▸ Polygon（面）</text>
+  <text x="34" y="146" class="m6it">Edge（边）</text>
+  <text x="34" y="164" class="m6it">Vertex（点）</text>
+  <text x="26" y="192" class="m6pt">UV Groups</text>
+  <text x="34" y="210" class="m6it">Shell_01 · 32%</text>
+  <text x="34" y="228" class="m6it">Shell_02 · 27%</text>
+  <text x="34" y="246" class="m6it">Shell_03 · 24%</text>
+  <text x="34" y="264" class="m6it">Shell_04 · 17%</text>
+  <text x="26" y="292" class="m6pt">UV 空间</text>
+  <text x="34" y="310" class="m6it">VS 虚拟空间</text>
+  <text x="34" y="328" class="m6it">RS 真实空间</text>
+
+  <!-- 中央 UV 工作区 -->
+  <rect x="198" y="90" width="460" height="252" class="m6uv" fill="#f8fafc"/>
+  <g stroke="#e2e8f0">
+    <line x1="198" y1="153" x2="658" y2="153"/><line x1="198" y1="216" x2="658" y2="216"/>
+    <line x1="198" y1="279" x2="658" y2="279"/><line x1="313" y1="90" x2="313" y2="342"/>
+    <line x1="428" y1="90" x2="428" y2="342"/><line x1="543" y1="90" x2="543" y2="342"/>
+  </g>
+  <path d="M 230 120 L 300 105 L 345 140 L 330 195 L 260 210 L 225 170 Z" fill="#dbeafe" stroke="#2563eb"/>
+  <path d="M 380 110 L 460 100 L 505 130 L 495 185 L 415 200 L 375 160 Z" fill="#dbeafe" stroke="#2563eb"/>
+  <path d="M 240 240 L 320 225 L 365 260 L 350 320 L 265 330 L 230 285 Z" fill="#dbeafe" stroke="#2563eb"/>
+  <path d="M 400 230 L 490 220 L 540 255 L 525 315 L 430 325 L 390 275 Z" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="428" y="352" style="font:10px 'Segoe UI';fill:#64748b;" text-anchor="middle">UV 工作区（0-1 空间）</text>
+
+  <!-- 右侧 3D 视口 -->
+  <rect x="666" y="90" width="200" height="252" class="m6vp"/>
+  <path d="M 730 150 L 790 135 L 830 165 L 820 230 L 760 255 L 720 210 Z" fill="#475569" stroke="#94a3b8"/>
+  <line x1="730" y1="150" x2="760" y2="255" stroke="#64748b"/>
+  <line x1="790" y1="135" x2="820" y2="230" stroke="#64748b"/>
+  <text x="766" y="330" style="font:10px 'Segoe UI';fill:#94a3b8;" text-anchor="middle">3D 视口（UV 着色检查）</text>
+
+  <!-- 步骤徽标 -->
+  <circle cx="49" cy="66" r="9" class="m6numc"/><text x="49" y="70" class="m6num">1</text>
+  <circle cx="142" cy="66" r="9" class="m6numc"/><text x="142" y="70" class="m6num">2</text>
+  <circle cx="256" cy="66" r="9" class="m6numc"/><text x="256" y="70" class="m6num">3</text>
+  <circle cx="357" cy="66" r="9" class="m6numc"/><text x="357" y="70" class="m6num">4</text>
+
+  <text x="14" y="392" class="m6leg">① Import 导入低模   ② Unwrap 全自动展开   ③ Pack &amp; Optimize 排布并均匀 Texel   ④ Export 导出带 UV 网格</text>
+</svg>
+<figcaption>图 7-6 · RizomUV 界面示意图：导入低模 → 自动展开 → 打包优化 → 导出</figcaption>
+</figure>
+
+<table>
+  <tr><th style="width:56px">步骤</th><th>操作</th><th>结果</th></tr>
+  <tr><td><b>①</b></td><td><span class="mono">File → Import</span>，导入已完成重拓扑的低模 OBJ/FBX</td><td>载入网格与既有 UV（若有）</td></tr>
+  <tr><td><b>②</b></td><td>全选多边形后执行 <span class="mono">Unwrap（Full）</span></td><td>自动切缝并展开为 UV 壳</td></tr>
+  <tr><td><b>③</b></td><td><span class="mono">Pack &amp; Optimize</span>：自动旋转排布 + Texel 比率均匀化</td><td>UV 空间利用率最大化，纹理密度一致</td></tr>
+  <tr><td><b>④</b></td><td><span class="mono">File → Export</span> OBJ/FBX</td><td>带标准 UV 的网格回流，可直接进 Substance / UE5</td></tr>
+</table>
+
+<p><b>TopoGun</b> —— 重拓扑与贴图烘焙：</p>
+
+<figure>
+<svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <style>
+    .m7win{fill:#fff;stroke:#94a3b8;stroke-width:1.5;}
+    .m7tb{fill:#0f1b2d;}
+    .m7tt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .m7menu{font:11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m7menub{fill:#f8fafc;stroke:#e2e8f0;}
+    .m7tbn{fill:#eef2f8;stroke:#cbd5e1;}
+    .m7tbnt{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;text-anchor:middle;}
+    .m7tbh{fill:#2563eb;stroke:#2563eb;}
+    .m7tbht{font:bold 10.5px 'Segoe UI','Microsoft YaHei';fill:#fff;text-anchor:middle;}
+    .m7tbt{fill:#dcfce7;stroke:#22c55e;}
+    .m7tbtT{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .m7vp{fill:#26313f;}
+    .m7hp{fill:#475569;opacity:.55;}
+    .m7lp{fill:none;stroke:#22d3ee;stroke-width:1.4;}
+    .m7panel{fill:#f8fafc;stroke:#e2e8f0;}
+    .m7pt{font:bold 11px 'Segoe UI','Microsoft YaHei';fill:#475569;}
+    .m7it{font:10.5px 'Segoe UI','Microsoft YaHei';fill:#334155;}
+    .m7status{fill:#f0f4fa;}
+    .m7st{font:10px Consolas,monospace;fill:#5b6b83;}
+    .m7numc{fill:#f5f3ff;stroke:#7c3aed;stroke-width:1.4;}
+    .m7num{font:bold 10.5px 'Segoe UI';fill:#7c3aed;text-anchor:middle;}
+    .m7leg{font:11px 'Segoe UI','Microsoft YaHei';fill:#5b6b83;}
+  </style>
+
+  <rect x="1" y="1" width="878" height="372" rx="10" class="m7win"/>
+  <rect x="1" y="1" width="878" height="26" rx="10" class="m7tb"/>
+  <text x="14" y="18" class="m7tt">TopoGun 3 — usf_retopo_project（高模: usf_scene.obj）</text>
+
+  <rect x="1" y="27" width="878" height="22" class="m7menub"/>
+  <text x="14" y="42" class="m7menu">File</text>
+  <text x="46" y="42" class="m7menu">Edit</text>
+  <text x="78" y="42" class="m7menu">View</text>
+  <text x="116" y="42" class="m7menu">Help</text>
+
+  <!-- 工具条 -->
+  <rect x="1" y="49" width="878" height="34" class="m7menub"/>
+  <rect x="14" y="55" width="118" height="22" rx="4" class="m7tbn"/><text x="73" y="70" class="m7tbnt">Load High-Poly</text>
+  <rect x="142" y="55" width="70" height="22" rx="4" class="m7tbh"/><text x="177" y="70" class="m7tbht">Build</text>
+  <rect x="222" y="55" width="70" height="22" rx="4" class="m7tbh"/><text x="257" y="70" class="m7tbht">Wrap</text>
+  <rect x="302" y="55" width="70" height="22" rx="4" class="m7tbh"/><text x="337" y="70" class="m7tbht">Bake</text>
+  <rect x="382" y="55" width="104" height="22" rx="4" class="m7tbt"/><text x="434" y="70" class="m7tbtT">Symmetry: X ✓</text>
+
+  <!-- 视口: 高模半透明 + 低模线框 -->
+  <rect x="14" y="90" width="624" height="252" class="m7vp"/>
+  <path d="M 150 150 L 280 110 L 400 140 L 440 230 L 350 310 L 210 290 L 140 220 Z" class="m7hp" stroke="#94a3b8"/>
+  <path d="M 150 150 L 280 110 M 150 150 L 140 220 M 280 110 L 400 140" fill="none" stroke="#94a3b8" stroke-width=".8"/>
+  <path d="M 200 180 L 300 155 L 360 185 L 370 240 L 290 275 L 215 250 L 195 215 Z" class="m7lp"/>
+  <path d="M 200 180 L 300 155 M 200 180 L 195 215 M 300 155 L 360 185" fill="none" stroke="#22d3ee" stroke-width="1"/>
+  <path d="M 370 240 L 290 275 M 290 275 L 215 250" fill="none" stroke="#22d3ee" stroke-width="1"/>
+  <text x="230" y="330" style="font:10px 'Segoe UI';fill:#94a3b8;">半透明高模（参考）</text>
+  <text x="330" y="172" style="font:10px 'Segoe UI';fill:#67e8f9;">低模线框（新建）</text>
+
+  <!-- 右侧选项面板 -->
+  <rect x="646" y="90" width="220" height="252" rx="6" class="m7panel"/>
+  <text x="658" y="110" class="m7pt">Tool Options</text>
+  <text x="666" y="132" class="m7it">Symmetry: X 轴对称 ✓</text>
+  <text x="666" y="152" class="m7it">Brush Size: 12</text>
+  <text x="666" y="172" class="m7it">Snap to Surface ✓</text>
+  <text x="666" y="192" class="m7it">Tolerance: 0.02</text>
+  <text x="658" y="220" class="m7pt">Bake 输出</text>
+  <text x="666" y="242" class="m7it">Normals Map · 4K</text>
+  <text x="666" y="262" class="m7it">AO Map · 4K</text>
+  <text x="666" y="282" class="m7it">ID / Curvature · 可选</text>
+  <text x="666" y="302" class="m7it">输出目录: usf_outputake\</text>
+
+  <!-- 状态栏 -->
+  <rect x="1" y="348" width="878" height="24" class="m7status"/>
+  <text x="12" y="364" class="m7st">高模: 2.4M tris · 低模: 8,912 quads · Symmetry X 已启用</text>
+
+  <!-- 步骤徽标 -->
+  <circle cx="73" cy="66" r="9" class="m7numc"/><text x="73" y="70" class="m7num">1</text>
+  <circle cx="177" cy="66" r="9" class="m7numc"/><text x="177" y="70" class="m7num">2</text>
+  <circle cx="257" cy="66" r="9" class="m7numc"/><text x="257" y="70" class="m7num">3</text>
+  <circle cx="337" cy="66" r="9" class="m7numc"/><text x="337" y="70" class="m7num">4</text>
+
+  <text x="14" y="392" class="m7leg">① Load High-Poly 载入高模   ② Build 逐面搭建低模（对称开启）   ③ Wrap 贴合高模表面   ④ Bake 输出法线/AO 贴图</text>
+</svg>
+<figcaption>图 7-7 · TopoGun 界面示意图：载入高模 → 搭建低模 → 包裹贴合 → 烘焙贴图</figcaption>
+</figure>
+
+<table>
+  <tr><th style="width:56px">步骤</th><th>操作</th><th>结果</th></tr>
+  <tr><td><b>①</b></td><td><span class="mono">File → Load High-Poly Mesh</span>，导入 <code>usf_scene.obj</code></td><td>高模以半透明参考形式显示</td></tr>
+  <tr><td><b>②</b></td><td>开启 <span class="mono">Symmetry</span> 后进入 <span class="mono">Build</span> 模式逐面搭建低模</td><td>布线完全可控的规范四边面低模</td></tr>
+  <tr><td><b>③</b></td><td><span class="mono">Wrap</span> 将低模顶点吸附贴合到高模表面</td><td>低模轮廓与高模细节对齐</td></tr>
+  <tr><td><b>④</b></td><td><span class="mono">Bake</span> 输出 Normals / AO / ID 贴图</td><td>低模 + 贴图回流，进 UV 展开或直接入下游</td></tr>
+</table>
+
+<div class="callout warn">
+  <div class="co-title">三款软件的路径填写要点</div>
+  <b>3D-Coat：</b>填主程序 <code>3D-Coat.exe</code>；安装器版本由注册表（Pilgway 键）自动命中，
+  <code>COAT3D_PATH</code> / <code>3DCOAT_PATH</code> 环境变量亦可用，Steam 版直接探测。<br>
+  <b>RizomUV：</b>填 <code>rizomuv.exe</code>（注意文件名全小写）；VS（虚拟空间）与 RS（真实空间）两版本通用，
+  常见于便携解压目录，探测不到时用「浏览…」指定。<br>
+  <b>TopoGun：</b>填 <code>TopoGun.exe</code>；设置环境变量 <code>TOPOGUN_PATH</code> 指向安装目录后免手动配置，
+  2.x / 3.x 版本均可。<br>
+  三款软件当前均为「探测 + 路径管理」级别：绿灯即代表就绪，路径随设置持久化；
+  深度桥接（无头自动化）上线后无需重新配置。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s8">
+<h2><span class="no">8</span>依赖体检与自动安装</h2>
+
+<p>点击 <kbd>依赖体检</kbd>（或 <b>设置 → 依赖体检与一键安装</b>）打开体检对话框。
+对话框顶部有<b>结论行</b>，直接回答「这些依赖够不够执行这个软件」：</p>
+
+<ul>
+  <li><b style="color:#16a34a;">✔ 依赖完整</b> —— GUI 与全部 8 个重建阶段（含 3DGS 训练）均可执行；</li>
+  <li><b style="color:#d97706;">◐ 基础流水线可运行</b> —— 采集 / SfM / 网格 / 导出正常，训练链缺少组件（红色行标注），按修复建议补齐即可；</li>
+  <li><b style="color:#dc2626;">✘ N 项核心依赖缺失</b> —— 需先安装红色行组件；各阶段失败会自动跳过，不会阻断主流程。</li>
+</ul>
+
+<h3>体检项目一览</h3>
+
+<table>
+  <tr><th>类别</th><th>检查内容</th><th>缺失时的处理</th></tr>
+  <tr><td>Python 库</td><td>PySide6 / numpy / opencv / plyfile / requests / open3d（已内置于 exe）</td><td>「安装缺失 Python 库」按所选镜像源 pip 安装</td></tr>
+  <tr><td>系统工具</td><td>FFmpeg、COLMAP（设置覆盖 → PATH → 便携版三级查找）</td><td>「安装缺失工具」多源回退下载官方便携 zip 解压到 <code>~\.universal_scene_forge\tools\</code>，成功后自动写回调用路径</td></tr>
+  <tr><td>GPU 驱动</td><td>nvidia-smi 是否可用</td><td>仅提示；无 CUDA 时 3DGS 训练会以极慢的 CPU 模式运行</td></tr>
+  <tr><td>训练环境</td><td>gaussian-splatting 仓库、训练 venv、torch+CUDA（后台探测，数秒后回填）</td><td>「一键创建训练环境」全自动安装（venv → torch → CUDA 子模块 → 验证）；也保留手动命令复制</td></tr>
+  <tr><td>DCC 扩展</td><td>需装入宿主软件的扩展面板（如 Premiere 抽帧 CEP 面板；宿主未安装则显示「暂不需要」）</td><td>「安装全部 DCC 扩展」本地复制装入宿主（无需联网）</td></tr>
+</table>
+
+<h3>pip 镜像源（6 个下载源）</h3>
+
+<p>Python 库安装支持 <b>6 个 pip 下载源</b>，下拉选择后立即保存，供「安装缺失 Python 库」与后续所有 pip 操作使用：</p>
+
+<table>
+  <tr><th>下载源</th><th>适用场景</th></tr>
+  <tr><td>清华 TUNA（默认）</td><td>国内推荐，同步及时</td></tr>
+  <tr><td>阿里云 / 腾讯云 / 中科大 USTC / 华为云</td><td>国内备选；单一镜像波动时切换另一家即可</td></tr>
+  <tr><td>官方 PyPI（直连）</td><td>海外网络环境</td></tr>
+</table>
+
+<div class="callout">
+  <div class="co-title">打包版（exe）的一键安装机制</div>
+  安装版 / 绿色版中，「安装缺失 Python 库」会借助<b>系统 Python</b>（推荐 3.12 x64，含
+  <code>py</code> 启动器；版本与软件内核一致以保证 C 扩展兼容）下载 wheel 包，并安装到
+  用户主目录 <code>~\.universal_scene_forge\python_pkgs\</code>（安装目录通常在
+  Program Files 下不可写）——软件启动时已把该目录纳入模块搜索路径，
+  <b>装完即可用，无需重启</b>。系统未装 Python 时会弹窗给出手动安装命令指引。
+  源码运行则直接安装进当前 Python 环境。
+</div>
+
+<h3>工具多源回退下载</h3>
+
+<p>FFmpeg / COLMAP 等便携版工具下载内置<b>镜像回退序列</b>：单个源失败（如超时、403）自动切换下一个，全部源耗尽才报错——</p>
+
+<ul>
+  <li><b>Blender</b>：官方 download.blender.org → NLUUG 镜像 → Clarkson 镜像（后两者为 Blender 官方镜像网络成员）；</li>
+  <li><b>FFmpeg</b>：gyan.dev 官方构建 → GitHub Releases 镜像；</li>
+  <li><b>COLMAP</b>：GitHub Releases 官方。</li>
+</ul>
+
+<p>下载与解压进度实时输出在对话框控制台；安装完成后自动写入「软件调用路径」（colmap_exe / ffmpeg_exe），流水线下次运行直接调用，无需重启软件。</p>
+
+<h3>DCC 扩展一键安装</h3>
+
+<p>USF 桥接的 16 款 DCC 大多通过命令行调用（随包分发，无需装入宿主）；但个别功能需要把
+<b>扩展面板装入宿主软件本体</b>，例如 Premiere Pro 的「USF 抽帧导出」CEP 面板。
+这类扩展由体检表的 <b>DCC 扩展</b> 区段统一管理（琥珀色 ◐ 标识）：</p>
+
+<ul>
+  <li><b>宿主未安装</b> —— 显示「暂不需要」，无需任何处理（例如未装 Premiere 时 CEP 面板没有意义）；</li>
+  <li><b>已装入</b> —— 显示「已装入 &lt;宿主名&gt;」，就绪；</li>
+  <li><b>待安装</b> —— 宿主已装但扩展未装，点击对话框下方的
+    <b>「安装全部 DCC 扩展」</b> 按钮即可。</li>
+</ul>
+
+<p>一键安装从安装包内置的 <code>extensions\</code> 目录<b>本地复制</b>到宿主的用户级扩展目录
+（如 Premiere 的 CEP extensions 目录），并自动写入 <code>PlayerDebugMode</code> 注册表以放开面板加载权限——
+<b>全程无需联网、无需管理员权限</b>；单个扩展失败不影响其余，结果逐行回显在对话框控制台。
+后续版本接入更多宿主扩展时，体检表与该按钮会自动纳入，UI 无需改动。</p>
+
+<h3>训练环境（3DGS 训练链）</h3>
+
+<p>体检表新增<b>训练环境</b>三行：仓库（train.py 就绪）、训练 venv（.venv 创建）、torch+CUDA（后台子进程探测，数秒后回填结果）。
+未初始化时，点击对话框下方的 <b>「一键创建训练环境」</b> 按钮，确认后软件即<b>全自动</b>完成下载与安装：</p>
+
+<ol>
+  <li><b>预检</b>：探测 VS C++ 生成工具与 CUDA Toolkit（编译子模块必需，缺失时仅警告并给出安装指引，不阻断）；</li>
+  <li><b>创建 venv</b>：在 <code>安装目录\external\gaussian-splatting\.venv\</code> 创建独立虚拟环境（不影响系统 Python）；</li>
+  <li><b>安装 torch+CUDA</b>：从官方 cu128 源下载安装（约 3 GB），<b>官方源失败自动回退交大镜像</b>（同一 cu128 整库镜像）；</li>
+  <li><b>编译安装 3 个 CUDA 子模块</b>：diff-gaussian-rasterization / simple-knn / fused-ssim（本机编译，约 5–20 分钟）；</li>
+  <li><b>验证</b>：子进程导入 torch 并检查 CUDA 可用性，成功后自动写入「软件调用路径」（gs_python），即可直接开始重建。</li>
+</ol>
+
+<p>全程输出实时滚动在对话框控制台；任何一步失败都会中止并给出对应的修复指引（装哪一步断的，重按按钮即从断点续装，已装组件自动跳过）。
+全程约 10–40 分钟（取决于网速）。需要系统装有 Python（推荐 3.12 x64）。
+也可点击「复制手动命令」获取等价命令块，在 CMD 中逐行执行：</p>
+
+<pre>cd /d &lt;安装目录&gt;\external\gaussian-splatting
+py -3.12 -m venv .venv
+&lt;安装目录&gt;\external\gaussian-splatting\.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+&lt;安装目录&gt;\external\gaussian-splatting\.venv\Scripts\python.exe -m pip install "&lt;仓库&gt;\submodules\diff-gaussian-rasterization" "&lt;仓库&gt;\submodules\simple-knn" "&lt;仓库&gt;\submodules\fused-ssim"</pre>
+
+<div class="callout">
+  <div class="co-title">torch 源与显卡架构</div>
+  命令使用 cu128 源：覆盖 Volta～Hopper 及 <b>Blackwell（RTX 50 系, sm_120）</b>，且 CUDA 12.x
+  轮子对驱动的兼容面最广。老版 cu121 源不支持 RTX 50 系。venv 固定 3.12（与软件内核同版，
+  torch 轮子覆盖最稳）。编译三个 CUDA 子模块另需 <b>MSVC 编译器</b>（Visual Studio Build Tools
+  的 C++ 工具集）与 CUDA Toolkit（nvcc），一键安装的预检与失败提示会明确指出所缺组件。
+</div>
+
+<div class="callout">
+  <div class="co-title">为什么训练环境独立？</div>
+  torch+CUDA 运行时超过 5 GB 且随显卡型号变化，打包进安装包不现实。
+  GUI 安装包保持 100 MB 以内，训练环境按需创建、与界面隔离，显卡升级后只需重建训练环境。
+</div>
+
+<div class="callout warn">
+  <div class="co-title">安全策略</div>
+  所有自动安装<b>默认先弹窗征得同意</b>；Blender / FFmpeg / COLMAP 仅使用官方便携版 zip 与官方镜像（免管理员权限）。
+  如需完全静默安装，可在 <code>settings.json</code> 中将 <code>allow_silent_install</code> 设为 <code>true</code>。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s9">
+<h2><span class="no">9</span>导出格式与降级链</h2>
+
+<h3>导出格式一览</h3>
+<table>
+  <tr><th>格式</th><th>内容</th><th>典型用途</th></tr>
+  <tr><td><b>OBJ</b></td><td>主网格 + LOD1/2 + 顶点色，纯本地生成（保底产物）</td><td>通用交换、ZBrush/ Rhino 导入</td></tr>
+  <tr><td><b>FBX</b></td><td>网格 + 材质 + 嵌入纹理，经 DCC 后处理</td><td>UE / Unity / Max / Maya 场景</td></tr>
+  <tr><td><b>GLB</b></td><td>glTF 二进制单文件</td><td>Web 预览、AR/VR、Three.js</td></tr>
+  <tr><td><b>BLEND</b></td><td>Blender 原生工程</td><td>在 Blender 中继续加工</td></tr>
+  <tr><td><b>UASSET</b></td><td>UE5 工程资产（/Game/USF）</td><td>引擎内直接使用</td></tr>
+</table>
+
+<h3>FBX 五级降级链</h3>
+
+<figure>
+<svg viewBox="0 0 820 150" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <style>
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.5;rx:8;}
+    .nd2{fill:#f1f5f9;stroke:#94a3b8;stroke-width:1.2;rx:8;}
+    .nt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .nt2{font:12px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .fl{font:11px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+  </style>
+  <rect x="10" y="30" width="128" height="52" class="nd"/>
+  <text x="74" y="52" class="nt">Blender</text>
+  <text x="74" y="70" class="nt2">首选导出器</text>
+  <line x1="138" y1="56" x2="168" y2="56" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="153" y="24" class="fl">失败/未装 ↓</text>
+
+  <rect x="170" y="30" width="128" height="52" class="nd2"/>
+  <text x="234" y="52" class="nt2" style="font-weight:bold;">3ds Max</text>
+  <text x="234" y="70" class="nt2">降级链 1</text>
+  <line x1="298" y1="56" x2="328" y2="56" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <rect x="330" y="30" width="128" height="52" class="nd2"/>
+  <text x="394" y="52" class="nt2" style="font-weight:bold;">Maya</text>
+  <text x="394" y="70" class="nt2">mayapy 无头</text>
+  <line x1="458" y1="56" x2="488" y2="56" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <rect x="490" y="30" width="128" height="52" class="nd2"/>
+  <text x="554" y="52" class="nt2" style="font-weight:bold;">Houdini</text>
+  <text x="554" y="70" class="nt2">hython 无头</text>
+  <line x1="618" y1="56" x2="648" y2="56" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+
+  <rect x="650" y="30" width="128" height="52" class="nd2"/>
+  <text x="714" y="52" class="nt2" style="font-weight:bold;">Cinema 4D</text>
+  <text x="714" y="70" class="nt2">Commandline</text>
+
+  <text x="410" y="120" class="nt2" style="fill:#22c55e;">全部失败时：OBJ / GLB 仍由本地算法保底输出，主流程不中断</text>
+</svg>
+<figcaption>FBX 导出降级链：前一级缺席或执行失败自动切换到下一级</figcaption>
+</figure>
+
+<div class="callout">
+  <div class="co-title">协议化调用</div>
+  所有 DCC 均以 <b>JSON 参数文件 + <code>[USF]</code> 标签协议</b> 无头调用：
+  脚本通过 <code>[USF] PROGRESS n msg</code> 回传进度、<code>[USF] FILE path</code> 回传产物路径，
+  规避 Windows 命令行引号转义问题，且每一步都有超时看门狗。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s10">
+<h2><span class="no">10</span>常见问题 FAQ</h2>
+
+<div class="faq-item">
+<div class="q">点了「开始重建」好像没反应？</div>
+<div class="a">正常启动的标志：按钮立即禁用、8 段步骤条复位为灰色 ○、消息行显示「正在启动流水线…」、
+日志控制台开始滚动输出。若瞬间弹窗提示失败，多为依赖缺失——先到 <b>设置 → 依赖体检与一键安装</b>
+补齐 COLMAP / FFmpeg；若界面完全无变化，检查输入源列表是否为空（列表为空时点开始会弹提示）。</div>
+</div>
+
+<div class="faq-item">
+<div class="q">点了开始重建，进度条一直停在 20% 左右？</div>
+  <div class="a">20–55% 区间是 3DGS 训练阶段，通常耗时最长（15–25 分钟属正常）。观察日志中
+  「3DGS 迭代 n/30000」是否在增长；确认 GPU 指示灯为绿色（无 CUDA 时会退化为 CPU 模式，慢 10–50 倍）。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">某软件指示灯是灰色的，需要装上它才能用 USF 吗？</div>
+  <div class="a">不需要。灰灯只表示「该软件未安装」。USF 的<b>保底产物（OBJ + GLB）完全本地生成</b>，
+  不依赖任何 DCC。Blender 缺席时 FBX 才会尝试 3ds Max → Maya → Houdini → C4D 降级链；
+  全部缺席则跳过 FBX，OBJ/GLB 照常输出。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">红色指示灯代表软件坏了？</div>
+  <div class="a">红等表示<b>该步骤调用失败</b>，常见原因：软件无授权（Metashape/C4D）、版本不兼容、
+  超时被看门狗终止。主流程已自动跳过并写日志，查看日志控制台中对应的 <code>[ERROR]</code> 行即可定位。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">SfM 阶段失败（日志提示 mapper 退出非零）？</div>
+  <div class="a">通常是视频纹理太弱、运动模糊或光照剧变导致特征匹配失败。换一段环绕、稳定、纹理丰富的视频
+  （避开白墙/玻璃/纯色物体），或降低抽帧率提高单帧质量。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">自动安装下载太慢或失败？</div>
+  <div class="a">网络受限时可手动下载便携版（Blender / FFmpeg / COLMAP 官网 zip），解压到任意目录后，
+  在「调用路径设置」中手动指定 exe 路径即可，效果与自动安装完全一致。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">输出的模型有破洞/浮空碎片？</div>
+  <div class="a">① 勾选「Metashape 洞穴修复」（需 Pro 授权）；② 在 settings.json 调低
+  <code>opacity_threshold</code>（如 0.25）过滤更多离群高斯；③ 保证拍摄覆盖完整（底部/背面也要拍到）。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">UE5 预览没反应？</div>
+  <div class="a">UE5 推流需要本机有可用 UE5 工程与对应版本。确认 UE5 指示灯为绿色，并在
+  「调用路径设置」中确认 <code>UnrealEditor-Cmd.exe</code> 路径正确。UE5 缺席只影响预览，不影响任何导出产物。</div>
+</div>
+
+<div class="faq-item">
+  <div class="q">在哪里改界面里没有的参数（泊松深度等）？</div>
+  <div class="a">编辑安装目录下 <code>settings.json</code>（见第 5 章高级参数表），保存后重启软件。</div>
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s11">
+<h2><span class="no">11</span>附录：文件位置</h2>
+
+<table>
+  <tr><th>内容</th><th>位置</th></tr>
+  <tr><td>程序本体</td><td class="mono">安装目录\UniversalSceneForge.exe</td></tr>
+  <tr><td>用户配置 settings.json</td><td class="mono">安装目录\settings.json</td></tr>
+  <tr><td>运行日志</td><td class="mono">日志控制台 + usf_work\logs\</td></tr>
+  <tr><td>工作目录（帧/位姿/模型/导出）</td><td class="mono">&lt;输入源同级&gt;\usf_work\</td></tr>
+  <tr><td>最终产物</td><td class="mono">usf_work\output\</td></tr>
+  <tr><td>自动下载的工具（FFmpeg/COLMAP/Blender 便携版）</td><td class="mono">%USERPROFILE%\.universal_scene_forge\tools\</td></tr>
+  <tr><td>3DGS 训练环境</td><td class="mono">安装目录\external\gaussian-splatting\.venv\</td></tr>
+  <tr><td>本文档（用户手册）</td><td class="mono">安装目录\docs\user_manual.html</td></tr>
+  <tr><td>部署流程图</td><td class="mono">安装目录\docs\deployment_flow.html</td></tr>
+</table>
+
+<footer>
+  Universal Scene Forge v0.9.4 · 用户手册 · 生成于 2026-09 ·
+  本文档随安装包分发，离线可用。
+</footer>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = document.querySelectorAll('nav.toc a');
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('active');});
+        var a = map[e.target.id];
+        if(a) a.classList.add('active');
+      }
+    });
+  },{rootMargin:'-80px 0px -70% 0px'});
+  document.querySelectorAll('main section').forEach(function(s){obs.observe(s);});
+})();
+</script>
+</body>
+</html>

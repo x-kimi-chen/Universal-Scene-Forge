@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal Scene Forge 部署流程图 v0.9.0</title>
+<style>
+:root{
+  --bg:#f6f8fb; --bg2:#ffffff; --ink:#1a2332; --muted:#5b6b83;
+  --rule:#e3e9f2; --accent:#2563eb; --accent2:#0891b2;
+  --ok:#22c55e; --busy:#f59e0b; --error:#ef4444; --off:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background:var(--bg);color:var(--ink);font-size:15px;line-height:1.75;}
+.mono{font-family:Consolas,"Courier New",monospace;}
+
+header.topbar{position:sticky;top:0;z-index:50;background:#0f1b2d;color:#fff;
+  display:flex;align-items:center;gap:14px;padding:14px 32px;
+  box-shadow:0 2px 8px rgba(15,27,45,.25);}
+header.topbar .logo{width:34px;height:34px;border-radius:8px;flex:none;
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+header.topbar h1{font-size:17px;font-weight:600;letter-spacing:.02em;}
+header.topbar .ver{margin-left:auto;font-size:12px;color:#9fb3d1;
+  border:1px solid #33445e;border-radius:99px;padding:2px 12px;}
+
+.wrap{max-width:1080px;margin:0 auto;padding:36px 24px 80px;}
+section{margin-bottom:56px;scroll-margin-top:80px;}
+h2{font-size:22px;font-weight:700;display:flex;align-items:center;gap:12px;
+  padding-bottom:10px;border-bottom:2px solid var(--rule);margin-bottom:8px;}
+h2 .no{flex:none;width:30px;height:30px;border-radius:8px;font-size:14px;
+  background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
+h2 + p.sub{color:var(--muted);margin-bottom:20px;font-size:14px;}
+h3{font-size:16px;font-weight:700;color:var(--accent);margin:26px 0 10px;}
+
+figure{margin:20px 0;background:var(--bg2);border:1px solid var(--rule);
+  border-radius:12px;padding:20px;overflow-x:auto;}
+figcaption{font-size:13px;color:var(--muted);margin-top:12px;text-align:center;}
+
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:18px 20px;margin:16px 0;}
+.callout{background:var(--bg2);border-left:4px solid var(--accent2);
+  border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14.5px;}
+.callout.warn{border-left-color:var(--busy);}
+.co-title{font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:4px;
+  text-transform:uppercase;color:var(--accent2);}
+.callout.warn .co-title{color:var(--busy);}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:14px 0;background:var(--bg2);}
+th{background:#f0f4fa;text-align:left;font-weight:600;padding:9px 12px;
+  border-bottom:2px solid var(--rule);white-space:nowrap;}
+td{padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+code{background:#eef2f8;border-radius:4px;padding:1px 6px;font-size:13px;
+  font-family:Consolas,"Courier New",monospace;color:#334155;}
+
+footer{border-top:1px solid var(--rule);padding-top:16px;margin-top:48px;
+  font-size:12.5px;color:var(--muted);}
+@media print{
+  header.topbar{position:static;box-shadow:none;}
+  body{background:#fff;}
+  figure{break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">USF</div>
+  <h1>Universal Scene Forge · 部署流程图</h1>
+  <span class="ver">v0.9.0 · 2026-09</span>
+</header>
+
+<div class="wrap">
+
+<!-- ============================================================ -->
+<section>
+<h2><span class="no">A</span>开发者构建流程</h2>
+<p class="sub">入口 <code>installer\build_windows.bat</code> · 四个阶段全自动，任一阶段失败即中止并提示</p>
+
+<figure>
+<svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <style>
+    .step{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.6;rx:10;}
+    .st{font:bold 13.5px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .sd{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .cmd{font:10.5px Consolas,monospace;fill:#7c3aed;text-anchor:middle;}
+    .out{fill:#f0fdf4;stroke:#22c55e;stroke-width:1.4;rx:8;}
+    .ot{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .od{font:11px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .fl{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.3;rx:8;}
+    .ft{font:11px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+  </style>
+
+  <!-- 阶段1 -->
+  <rect x="16" y="40" width="200" height="96" class="step"/>
+  <text x="116" y="66" class="st">[1/4] 创建虚拟环境</text>
+  <text x="116" y="88" class="cmd">py -3.12 -m venv .venv</text>
+  <text x="116" y="108" class="sd">优先 Python 3.12</text>
+  <text x="116" y="126" class="sd">（open3d wheel 上限）</text>
+
+  <line x1="216" y1="88" x2="252" y2="88" stroke="#2563eb" stroke-width="2.2" marker-end="url(#a1)"/>
+
+  <!-- 阶段2 -->
+  <rect x="254" y="40" width="210" height="96" class="step"/>
+  <text x="359" y="66" class="st">[2/4] 安装依赖</text>
+  <text x="359" y="88" class="cmd">pip install -r requirements.txt</text>
+  <text x="359" y="108" class="sd">PySide6 / open3d / numpy …</text>
+  <text x="359" y="126" class="sd">失败自动切清华镜像重试</text>
+
+  <line x1="464" y1="88" x2="500" y2="88" stroke="#2563eb" stroke-width="2.2" marker-end="url(#a1)"/>
+
+  <!-- 阶段3 -->
+  <rect x="502" y="40" width="222" height="96" class="step"/>
+  <text x="613" y="66" class="st">[3/4] PyInstaller 打包</text>
+  <text x="613" y="88" class="cmd">pyinstaller usf.spec --noconfirm</text>
+  <text x="613" y="108" class="sd">onedir 模式 + 资源目录</text>
+  <text x="613" y="126" class="cmd">robocopy external\gs → dist</text>
+
+  <line x1="724" y1="88" x2="760" y2="88" stroke="#2563eb" stroke-width="2.2" marker-end="url(#a1)"/>
+
+  <!-- 阶段4 -->
+  <rect x="762" y="40" width="222" height="96" class="step"/>
+  <text x="873" y="66" class="st">[4/4] NSIS 安装向导</text>
+  <text x="873" y="88" class="cmd">makensis usf_setup.nsi</text>
+  <text x="873" y="108" class="sd">自动发现: PATH → 两处</text>
+  <text x="873" y="126" class="sd">Program Files 目录</text>
+
+  <!-- 分支: 成功 -->
+  <line x1="873" y1="136" x2="873" y2="178" stroke="#22c55e" stroke-width="2" marker-end="url(#a1)"/>
+  <rect x="762" y="180" width="222" height="60" class="out"/>
+  <text x="873" y="204" class="ot">✓ 单文件安装包</text>
+  <text x="873" y="224" class="cmd">UniversalSceneForge_Setup.exe (170MB)</text>
+
+  <!-- 分支: makensis 缺失 -->
+  <line x1="762" y1="88" x2="700" y2="88" stroke="none"/>
+  <path d="M 762 60 L 700 60 L 700 200 L 740 200" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#a2)"/>
+  <rect x="470" y="180" width="270" height="60" class="fl"/>
+  <text x="605" y="204" class="ft">⚠ 未安装 makensis → 跳过安装向导</text>
+  <text x="605" y="224" class="ft">仅生成绿色免安装目录 dist\UniversalSceneForge\</text>
+
+  <!-- 阶段3 产物 -->
+  <line x1="613" y1="136" x2="613" y2="160" stroke="none"/>
+  <path d="M 613 136 L 613 160 L 380 160 L 380 180" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#a2)"/>
+  <rect x="60" y="182" width="320" height="58" class="out"/>
+  <text x="220" y="206" class="ot">✓ 绿色目录 dist\UniversalSceneForge\</text>
+  <text x="220" y="226" class="od">启动器 14.7 MB + _internal 运行时 464 MB + 训练仓库</text>
+
+  <!-- 底注 -->
+  <text x="500" y="286" class="sd" style="fill:#64748b;">构建前置: Python 3.10–3.12 · NSIS（可选）· 训练仓库已就位于 external\gaussian-splatting（含 diff-gaussian-rasterization / simple-knn / fused-ssim 子模块）</text>
+  <text x="500" y="308" class="sd" style="fill:#94a3b8;">任一步骤 errorlevel ≠ 0 → 输出失败日志并中止；绿色目录在 NSIS 缺席时即为最终交付物</text>
+</svg>
+<figcaption>图 A-1 · build_windows.bat 构建管线：venv → 依赖 → PyInstaller(onedir) → NSIS（可选）</figcaption>
+</figure>
+
+<div class="callout">
+  <div class="co-title">设计决策</div>
+  ① 训练仓库 <b>源码</b>随包分发（robocopy 到 dist），但 torch+CUDA <b>运行环境</b>不打包——体积与显卡耦合，
+  由用户侧依赖体检按需创建；② NSIS 步骤<b>幂等可选</b>：无 makensis 不失败，直接交付绿色版；
+  ③ 打包资源（DCC 脚本 / 文档）放在 <code>_internal\</code>，由 <code>paths.py</code> 在源码与冻结两种模式下统一解析。
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+<h2><span class="no">B</span>用户部署与首次运行流程</h2>
+<p class="sub">从拿到安装包到完成第一次重建的完整路径</p>
+
+<figure>
+<svg viewBox="0 0 1000 640" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="b1" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="b2" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <style>
+    .ph{fill:#fff;stroke:#cbd5e1;stroke-width:1.4;rx:12;}
+    .pht{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#64748b;letter-spacing:2px;}
+    .nd{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.6;rx:10;}
+    .nt{font:bold 13px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;text-anchor:middle;}
+    .ndt{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#475569;text-anchor:middle;}
+    .dec{fill:#fff;stroke:#7c3aed;stroke-width:1.6;rx:16;}
+    .dt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#6d28d9;text-anchor:middle;}
+    .ok{fill:#f0fdf4;stroke:#22c55e;stroke-width:1.5;rx:10;}
+    .ot{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#15803d;text-anchor:middle;}
+    .fl{fill:#fef3c7;stroke:#f59e0b;stroke-width:1.4;rx:10;}
+    .ft{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#b45309;text-anchor:middle;}
+    .lbl{font:11px 'Segoe UI','Microsoft YaHei';fill:#94a3b8;text-anchor:middle;}
+  </style>
+
+  <!-- 泳道标题 -->
+  <rect x="10" y="6" width="230" height="620" class="ph"/>
+  <text x="125" y="30" class="pht" text-anchor="middle">① 安装</text>
+  <rect x="248" y="6" width="230" height="620" class="ph"/>
+  <text x="363" y="30" class="pht" text-anchor="middle">② 依赖就绪</text>
+  <rect x="486" y="6" width="230" height="620" class="ph"/>
+  <text x="601" y="30" class="pht" text-anchor="middle">③ 环境探测</text>
+  <rect x="724" y="6" width="266" height="620" class="ph"/>
+  <text x="857" y="30" class="pht" text-anchor="middle">④ 一键重建</text>
+
+  <!-- ① 安装泳道 -->
+  <rect x="28" y="52" width="194" height="74" class="nd"/>
+  <text x="125" y="80" class="nt">Setup.exe 安装向导</text>
+  <text x="125" y="100" class="ndt">NSIS · 管理员权限</text>
+  <text x="125" y="116" class="ndt">SetRegView 64 写注册表</text>
+
+  <line x1="125" y1="126" x2="125" y2="158" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="28" y="160" width="194" height="66" class="nd"/>
+  <text x="125" y="186" class="nt">VC Redist 检测</text>
+  <text x="125" y="206" class="ndt">缺失则自动安装运行库</text>
+
+  <line x1="125" y1="226" x2="125" y2="258" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="28" y="260" width="194" height="66" class="dec"/>
+  <text x="125" y="286" class="dt">绿色版用户？</text>
+  <text x="125" y="306" class="ndt">直接双击主 exe 跳过①</text>
+
+  <line x1="125" y1="326" x2="125" y2="358" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="28" y="360" width="194" height="66" class="nd"/>
+  <text x="125" y="386" class="nt">启动 USF.exe</text>
+  <text x="125" y="406" class="ndt">GUI 壳 ≈464 MB</text>
+  <text x="125" y="422" class="ndt">PySide6 界面加载</text>
+
+  <!-- ① → ② -->
+  <path d="M 222 393 L 266 393" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- ② 依赖泳道 -->
+  <rect x="266" y="52" width="194" height="74" class="dec"/>
+  <text x="363" y="76" class="dt">依赖体检（用户触发）</text>
+  <text x="363" y="96" class="ndt">Python库 / 工具 / CUDA</text>
+  <text x="363" y="114" class="ndt">四类组件体检报告</text>
+
+  <line x1="363" y1="126" x2="363" y2="152" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="266" y="154" width="194" height="86" class="nd"/>
+  <text x="363" y="178" class="nt">缺 FFmpeg/COLMAP/Blender</text>
+  <text x="363" y="198" class="ndt">确认对话框 → 自动下载</text>
+  <text x="363" y="216" class="ndt">官方便携 zip 解压</text>
+  <text x="363" y="232" class="ndt">→ ~/.universal_scene_forge/tools/</text>
+
+  <line x1="363" y1="240" x2="363" y2="266" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="266" y="268" width="194" height="86" class="nd"/>
+  <text x="363" y="292" class="nt">缺 torch+CUDA</text>
+  <text x="363" y="312" class="ndt">引导创建训练环境</text>
+  <text x="363" y="330" class="ndt">external/gaussian-splatting</text>
+  <text x="363" y="348" class="ndt">/.venv（独立隔离）</text>
+
+  <line x1="363" y1="354" x2="363" y2="380" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="266" y="382" width="194" height="60" class="fl"/>
+  <text x="363" y="406" class="ft">无 NVIDIA GPU？</text>
+  <text x="363" y="424" class="ft">警告 → CPU 模式（训练极慢）</text>
+
+  <!-- ② → ③ -->
+  <path d="M 460 240 L 504 240" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- ③ 探测泳道 -->
+  <rect x="504" y="52" width="194" height="120" class="nd"/>
+  <text x="601" y="78" class="nt">DCC 三级探测</text>
+  <text x="601" y="100" class="ndt">① 环境变量</text>
+  <text x="601" y="120" class="ndt">② 注册表 HKLM</text>
+  <text x="601" y="140" class="ndt">③ 常见路径 / Steam 库</text>
+  <text x="601" y="162" class="ndt">覆盖 13 款软件</text>
+
+  <line x1="601" y1="172" x2="601" y2="198" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="504" y="200" width="194" height="86" class="dec"/>
+  <text x="601" y="224" class="dt">命中？</text>
+  <text x="601" y="244" class="ndt">是 → 指示灯绿</text>
+  <text x="601" y="262" class="ndt">否 → 灰灯（不影响）</text>
+  <text x="601" y="280" class="ndt">手动路径优先级最高</text>
+
+  <line x1="601" y1="286" x2="601" y2="312" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="504" y="314" width="194" height="86" class="nd"/>
+  <text x="601" y="338" class="nt">调用路径设置（可选）</text>
+  <text x="601" y="358" class="ndt">便携版/非标准安装位置</text>
+  <text x="601" y="376" class="ndt">手动指定 exe 覆盖探测</text>
+  <text x="601" y="394" class="ndt">保存 → 自动重新探测</text>
+
+  <!-- ③ → ④ -->
+  <path d="M 698 240 L 742 240" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- ④ 重建泳道 -->
+  <rect x="742" y="52" width="230" height="74" class="nd"/>
+  <text x="857" y="80" class="nt">输入视频/图像序列</text>
+  <text x="857" y="100" class="ndt">拖入窗口或浏览选择</text>
+  <text x="857" y="116" class="ndt">帧缩略图即时预览</text>
+
+  <line x1="857" y1="126" x2="857" y2="152" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="742" y="154" width="230" height="120" class="nd"/>
+  <text x="857" y="180" class="nt">▶ 开始重建（八阶段）</text>
+  <text x="857" y="202" class="ndt">抽帧→SfM→3DGS→网格</text>
+  <text x="857" y="220" class="ndt">→UE5预览→DCC后处理</text>
+  <text x="857" y="238" class="ndt">→修复(可选)→导出</text>
+  <text x="857" y="260" class="ndt">单阶段失败自动跳过</text>
+
+  <line x1="857" y1="274" x2="857" y2="300" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="742" y="302" width="230" height="66" class="dec"/>
+  <text x="857" y="326" class="dt">某 DCC 失败？</text>
+  <text x="857" y="348" class="ndt">红灯 + 日志 + 降级链切换</text>
+
+  <line x1="857" y1="368" x2="857" y2="394" stroke="#2563eb" stroke-width="2" marker-end="url(#b1)"/>
+  <rect x="742" y="396" width="230" height="86" class="ok"/>
+  <text x="857" y="422" class="ot">✓ 完成</text>
+  <text x="857" y="442" class="ndt">usf_work\output\ 收取产物</text>
+  <text x="857" y="460" class="ndt">FBX/OBJ/GLB/BLEND/UASSET</text>
+  <text x="857" y="478" class="ndt">OBJ+GLB 永远保底输出</text>
+
+  <!-- 底部时间轴 -->
+  <text x="363" y="580" class="lbl">全程约 10 分钟（不含训练）</text>
+  <text x="857" y="580" class="lbl">单次重建 30–60 分钟（RTX 3060 参考）</text>
+</svg>
+<figcaption>图 B-1 · 用户部署与首次运行：安装 → 依赖就绪 → 环境探测 → 一键重建</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section>
+<h2><span class="no">C</span>运行时部署架构（onedir 目录布局）</h2>
+<p class="sub">安装完成后的目录结构与运行时进程边界</p>
+
+<figure>
+<svg viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+  <defs>
+    <marker id="c1" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <style>
+    .dir{fill:#fff;stroke:#cbd5e1;stroke-width:1.3;rx:8;}
+    .dt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#0f1b2d;}
+    .dd{font:11.5px 'Segoe UI','Microsoft YaHei';fill:#64748b;}
+    .exe{fill:#eaf1fd;stroke:#2563eb;stroke-width:1.6;rx:8;}
+    .et{font:bold 13px 'Segoe UI','Microsoft YaHei';fill:#1d4ed8;}
+    .gd{fill:#f0fdf4;stroke:#22c55e;stroke-width:1.4;rx:8;}
+    .gt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#15803d;}
+    .ext{fill:#f5f3ff;stroke:#7c3aed;stroke-width:1.4;rx:8;}
+    .xt{font:bold 12px 'Segoe UI','Microsoft YaHei';fill:#6d28d9;}
+    .xx{font:11px 'Segoe UI','Microsoft YaHei';fill:#64748b;}
+    .proc{fill:#0f1b2d;rx:10;}
+    .pt{font:bold 12.5px 'Segoe UI','Microsoft YaHei';fill:#fff;}
+    .pd{font:11px Consolas,monospace;fill:#9fb3d1;}
+  </style>
+
+  <!-- 目录树 -->
+  <rect x="14" y="14" width="330" height="440" class="dir"/>
+  <text x="30" y="40" class="dt">📁 UniversalSceneForge\（安装根目录）</text>
+  <text x="46" y="66" class="xx">│</text>
+  <rect x="46" y="76" width="270" height="40" class="exe"/>
+  <text x="60" y="94" class="et">🚀 UniversalSceneForge.exe</text>
+  <text x="60" y="110" class="xx">启动器 14.7 MB</text>
+  <text x="46" y="136" class="xx">│</text>
+  <text x="46" y="154" class="xx">├ 📁 _internal\　PyInstaller 6 运行时（464 MB）</text>
+  <text x="64" y="172" class="xx">│　　├ python DLL + 依赖库</text>
+  <text x="64" y="190" class="xx">│　　├ 📁 scripts\　DCC 无头脚本（随包）</text>
+  <text x="64" y="208" class="xx">│　　│　　├ blender\ · houdini\ · c4d\</text>
+  <text x="64" y="226" class="xx">│　　│　　└ maya\ · max\ · ue5\ · metashape\</text>
+  <text x="64" y="244" class="xx">│　　└ 📁 docs\　本文档 + 用户手册</text>
+  <text x="46" y="262" class="xx">│</text>
+  <rect x="46" y="272" width="270" height="56" class="ext"/>
+  <text x="60" y="292" class="xt">🧪 external\gaussian-splatting\</text>
+  <text x="60" y="308" class="xx">训练仓库源码（随包分发）</text>
+  <text x="60" y="324" class="xx">.venv\ ← 训练环境按需创建</text>
+  <text x="46" y="348" class="xx">│</text>
+  <rect x="46" y="358" width="270" height="40" class="gd"/>
+  <text x="60" y="376" class="gt">⚙ settings.json</text>
+  <text x="60" y="392" class="xx">配置 + DCC 手动路径覆盖</text>
+  <text x="46" y="416" class="xx">└ 版本信息 / 卸载器（NSIS 安装时注册）</text>
+
+  <!-- 进程模型 -->
+  <rect x="380" y="14" width="290" height="200" class="proc"/>
+  <text x="396" y="42" class="pt">USF 主进程（GUI）</text>
+  <text x="396" y="66" class="pd">PySide6 主线程 ─ 只画 UI</text>
+  <text x="396" y="86" class="pd">流水线 QThread ─ 编排/看门狗</text>
+  <text x="396" y="106" class="pd">EventBus(Qt Signal) ─ 跨线程回传</text>
+  <text x="396" y="140" class="pd">协议: JSON 参数文件</text>
+  <text x="396" y="158" class="pd">　　　 [USF] PROGRESS n msg</text>
+  <text x="396" y="176" class="pd">　　　 [USF] FILE path</text>
+  <text x="396" y="200" class="pd">超时: taskkill /T /F　取消: stop_event</text>
+
+  <line x1="344" y1="114" x2="376" y2="114" stroke="#2563eb" stroke-width="2" marker-end="url(#c1)"/>
+  <text x="360" y="102" style="font:10.5px 'Segoe UI';" fill="#94a3b8" text-anchor="middle">启动</text>
+
+  <!-- 子进程群 -->
+  <rect x="702" y="14" width="284" height="200" class="dir"/>
+  <text x="718" y="40" class="dt">无头子进程（按需拉起）</text>
+  <rect x="718" y="52" width="120" height="34" class="exe"/>
+  <text x="778" y="73" class="xx" text-anchor="middle">ffmpeg.exe</text>
+  <rect x="850" y="52" width="120" height="34" class="exe"/>
+  <text x="910" y="73" class="xx" text-anchor="middle">COLMAP.exe</text>
+  <rect x="718" y="96" width="120" height="34" class="exe"/>
+  <text x="778" y="117" class="xx" text-anchor="middle">blender.exe</text>
+  <rect x="850" y="96" width="120" height="34" class="exe"/>
+  <text x="910" y="117" class="xx" text-anchor="middle">hython.exe</text>
+  <rect x="718" y="140" width="120" height="34" class="exe"/>
+  <text x="778" y="161" class="xx" text-anchor="middle">mayapy.exe</text>
+  <rect x="850" y="140" width="120" height="34" class="exe"/>
+  <text x="910" y="161" class="xx" text-anchor="middle">C4D Cmd.exe</text>
+  <rect x="718" y="184" width="120" height="34" class="exe"/>
+  <text x="778" y="205" class="xx" text-anchor="middle">metashape.exe</text>
+  <rect x="850" y="184" width="120" height="34" class="exe"/>
+  <text x="910" y="205" class="xx" text-anchor="middle">UE5-Cmd.exe</text>
+
+  <line x1="670" y1="114" x2="698" y2="114" stroke="#2563eb" stroke-width="2" marker-end="url(#c1)"/>
+  <text x="684" y="102" style="font:10.5px 'Segoe UI';" fill="#94a3b8" text-anchor="middle">拉起</text>
+
+  <!-- 训练环境 -->
+  <rect x="380" y="240" width="290" height="100" class="ext"/>
+  <text x="396" y="266" class="xt">🧪 3DGS 训练环境（独立 .venv）</text>
+  <text x="396" y="290" class="xx">python train.py ← 独立解释器子进程</text>
+  <text x="396" y="310" class="xx">torch + CUDA（不打包进 exe）</text>
+  <text x="396" y="330" class="xx">CUDA_VISIBLE_DEVICES 控制独占 GPU</text>
+  <line x1="525" y1="214" x2="525" y2="236" stroke="#2563eb" stroke-width="2" marker-end="url(#c1)"/>
+
+  <!-- 用户级目录 -->
+  <rect x="380" y="366" width="290" height="88" class="gd"/>
+  <text x="396" y="392" class="gt">📦 用户级目录 ~/.universal_scene_forge/</text>
+  <text x="396" y="414" class="xx">tools\ ← 自动下载的便携版</text>
+  <text x="396" y="432" class="xx">　　　　Blender / FFmpeg / COLMAP</text>
+  <line x1="525" y1="340" x2="525" y2="362" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="4 4"/>
+
+  <text x="857" y="270" class="xx" text-anchor="middle" style="fill:#94a3b8;">每个子进程均有</text>
+  <text x="857" y="290" class="xx" text-anchor="middle" style="fill:#94a3b8;">独立超时看门狗</text>
+  <text x="857" y="330" class="xx" text-anchor="middle" style="fill:#94a3b8;">失败 → 红灯 + 日志</text>
+  <text x="857" y="350" class="xx" text-anchor="middle" style="fill:#94a3b8;">主流程不中断</text>
+</svg>
+<figcaption>图 C-1 · 运行时架构：onedir 目录布局、GUI 主进程与无头子进程边界、训练环境隔离</figcaption>
+</figure>
+
+<table>
+  <tr><th>部署形态</th><th>生成条件</th><th>产物</th><th>适用场景</th></tr>
+  <tr><td><b>安装版</b></td><td>构建机装有 NSIS（PATH 或 Program Files）</td><td class="mono">UniversalSceneForge_Setup.exe（约 170 MB）</td><td>正式交付；写 64 位注册表、含 VC Redist 检测与卸载器</td></tr>
+  <tr><td><b>绿色免安装版</b></td><td>构建机无 makensis（自动跳过 NSIS 步骤）</td><td class="mono">dist\UniversalSceneForge\ 目录</td><td>免管理员权限、U 盘分发；双击主 exe 即用</td></tr>
+</table>
+
+<footer>
+  Universal Scene Forge v0.9.0 · 部署流程图 · 生成于 2026-09 ·
+  本文档随安装包分发，离线可用。配套文档：<code>user_manual.html</code>（用户手册）。
+</footer>
+</section>
+
+</div>
+</body>
+</html>

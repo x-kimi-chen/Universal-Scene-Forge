@@ -1,0 +1,31 @@
+# UTF-8
+# PyInstaller --version-file 资源(D-02): 文件管理器「详细信息」列需要
+# FileVersion / ProductName / CompanyName, 空值会被识别为无厂商来源。
+# 版本号改动时同步: app/__init__.py 与 usf_setup.nsi。
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 9, 4, 0),
+    prodvers=(0, 9, 4, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('080404b0', [
+        StringStruct('CompanyName', 'USF Project'),
+        StringStruct('FileDescription', '3DGS 场景重建与 DCC 自动化导出工具'),
+        StringStruct('FileVersion', '0.9.4'),
+        StringStruct('InternalName', 'UniversalSceneForge'),
+        StringStruct('LegalCopyright', 'USF Project'),
+        StringStruct('OriginalFilename', 'UniversalSceneForge.exe'),
+        StringStruct('ProductName', 'Universal Scene Forge'),
+        StringStruct('ProductVersion', '0.9.4'),
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)

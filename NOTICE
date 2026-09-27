@@ -1,0 +1,18 @@
+Universal Scene Forge
+Copyright (c) 2026 CYM
+
+This product is licensed under the MIT License (see LICENSE).
+
+This product contains no third-party source code within its own source tree.
+It optionally drives the following third-party software, which the end user
+obtains and licenses separately; these components are NOT part of, and are
+NOT distributed with, this repository's MIT-licensed code:
+
+  * gaussian-splatting (Inria / MPII) — research/non-commercial use only.
+    See THIRD_PARTY_LICENSES.md before any use or redistribution.
+  * COLMAP (BSD-3-Clause) — downloaded at runtime from official releases.
+  * FFmpeg (GPLv3, gyan.dev essentials build) — downloaded at runtime.
+  * PySide6 (LGPL-3.0), plyfile (GPL-3.0) and other Python dependencies —
+    installed via pip from PyPI at runtime.
+
+Full attribution and license details: THIRD_PARTY_LICENSES.md.

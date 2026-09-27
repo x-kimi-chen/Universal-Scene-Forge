@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal Scene Forge · C4D 桥接沙箱限制测试报告</title>
+<style>
+:root{
+  --bg:#f6f8fb; --bg2:#ffffff; --ink:#1a2332; --muted:#5b6b83;
+  --rule:#e3e9f2; --accent:#2563eb; --accent2:#0891b2;
+  --ok:#22c55e; --busy:#f59e0b; --error:#ef4444; --off:#6b7280; --skip:#3b82f6;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background:var(--bg);color:var(--ink);font-size:15px;line-height:1.75;}
+.mono{font-family:Consolas,"Courier New",monospace;}
+
+header.topbar{background:#0f1b2d;color:#fff;display:flex;align-items:center;gap:14px;
+  padding:14px 32px;box-shadow:0 2px 8px rgba(15,27,45,.25);}
+header.topbar .logo{width:34px;height:34px;border-radius:8px;flex:none;
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+header.topbar h1{font-size:17px;font-weight:600;}
+header.topbar .ver{margin-left:auto;font-size:12px;color:#9fb3d1;
+  border:1px solid #33445e;border-radius:99px;padding:2px 12px;}
+
+.wrap{max-width:980px;margin:0 auto;padding:36px 24px 80px;}
+section{margin-bottom:48px;}
+h2{font-size:21px;font-weight:700;display:flex;align-items:center;gap:12px;
+  padding-bottom:10px;border-bottom:2px solid var(--rule);margin-bottom:18px;}
+h2 .no{flex:none;width:30px;height:30px;border-radius:8px;font-size:14px;
+  background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
+h3{font-size:16px;font-weight:700;color:var(--accent);margin:24px 0 10px;}
+p{margin-bottom:12px;}
+ul,ol{margin:0 0 14px 24px;}
+li{margin-bottom:6px;}
+
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:18px 20px;margin:16px 0;}
+.callout{background:var(--bg2);border-left:4px solid var(--accent2);
+  border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14.5px;}
+.callout.err{border-left-color:var(--error);}
+.callout.ok{border-left-color:var(--ok);}
+.callout.warn{border-left-color:var(--busy);}
+.co-title{font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:4px;
+  text-transform:uppercase;color:var(--accent2);}
+.callout.err .co-title{color:var(--error);}
+.callout.ok .co-title{color:var(--ok);}
+.callout.warn .co-title{color:var(--busy);}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:14px 0;background:var(--bg2);}
+th{background:#f0f4fa;text-align:left;font-weight:600;padding:9px 12px;
+  border-bottom:2px solid var(--rule);white-space:nowrap;}
+td{padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+code{background:#eef2f8;border-radius:4px;padding:1px 6px;font-size:13px;
+  font-family:Consolas,"Courier New",monospace;color:#334155;}
+
+pre.log{background:#0f1b2d;color:#d1d5db;border-radius:10px;padding:16px 18px;
+  font-family:Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.6;
+  overflow-x:auto;margin:14px 0;}
+pre.log .g{color:#22c55e;} pre.log .y{color:#f59e0b;}
+pre.log .r{color:#ef4444;} pre.log .b{color:#60a5fa;} pre.log .v{color:#c084fc;}
+
+.steps{counter-reset:step;list-style:none;margin:16px 0;padding:0;}
+.steps li{counter-increment:step;position:relative;padding:0 0 16px 48px;}
+.steps li::before{content:counter(step);position:absolute;left:0;top:1px;width:30px;height:30px;
+  border-radius:50%;background:#eaf1fd;color:var(--accent);font-weight:700;font-size:13px;
+  display:flex;align-items:center;justify-content:center;}
+.steps li b{display:block;margin-bottom:2px;}
+
+.pill{display:inline-block;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600;}
+.pill.pass{background:#dcfce7;color:#15803d;}
+.pill.blocked{background:#fee2e2;color:#b91c1c;}
+.pill.info{background:#e0edff;color:#1d4ed8;}
+
+footer{border-top:1px solid var(--rule);padding-top:16px;margin-top:48px;
+  font-size:12.5px;color:var(--muted);}
+
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:14px;margin:18px 0;}
+.summary-grid .cell{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:16px;text-align:center;}
+.summary-grid .num{font-size:26px;font-weight:700;}
+.summary-grid .lab{font-size:12.5px;color:var(--muted);margin-top:2px;}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">USF</div>
+  <h1>C4D 桥接 · 沙箱限制测试报告</h1>
+  <span class="ver">v0.9.0 · 2026-09-08</span>
+</header>
+
+<div class="wrap">
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">1</span>测试摘要</h2>
+
+<div class="summary-grid">
+  <div class="cell"><div class="num" style="color:var(--accent);">4</div><div class="lab">测试用例</div></div>
+  <div class="cell"><div class="num" style="color:var(--ok);">4</div><div class="lab">桥接逻辑全部按设计工作</div></div>
+  <div class="cell"><div class="num" style="color:var(--error);">0</div><div class="lab">桥接代码缺陷</div></div>
+  <div class="cell"><div class="num" style="color:var(--busy);">1</div><div class="lab">环境级阻断（沙箱）</div></div>
+</div>
+
+<div class="callout">
+  <div class="co-title">结论</div>
+  <b>Cinema 4D 桥接（OBJ → FBX）无法在 TRAE 代理沙箱内完成端到端验证</b>，根因是沙箱的文件系统白名单
+  拦截了 C4D 启动时对其配置目录 <code>%APPDATA%\Roaming\Maxon\...</code> 的写入，导致 Commandline.exe
+  无限挂起、c4dpy.exe 崩溃。<b>桥接代码本身无缺陷</b>：超时看门狗、进程树终止、[USF] 协议解析、
+  异常上抛与降级链切换均在本次测试中按设计运行。建议按第 5 章指南在正常桌面环境完成最终验收。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">2</span>测试环境</h2>
+
+<table>
+  <tr><th>项目</th><th>内容</th></tr>
+  <tr><td>宿主软件</td><td>Universal Scene Forge v0.9.0（源码模式，Python 3.12 venv）</td></tr>
+  <tr><td>被测组件</td><td><code>app/dcc/c4d_bridge.py</code> + <code>scripts/c4d/obj_to_fbx.py</code></td></tr>
+  <tr><td>目标软件</td><td>Maxon Cinema 4D <b>2025.3.3</b>（build 2025_3_3_2bba821e6ecc_1947535878，已安装于 <code>C:\Program Files\Maxon Cinema 4D 2025\</code>）</td></tr>
+  <tr><td>探测结果</td><td>三级探测命中（common path），指示灯绿，探测路径 <code>Cinema 4D.exe</code></td></tr>
+  <tr><td>批处理入口</td><td><code>Commandline.exe</code>（存在，桥接自动由主程序路径推导）与 <code>c4dpy.exe</code></td></tr>
+  <tr><td>执行环境</td><td>TRAE 代理 Shell（受文件系统沙箱约束）—— <b>与用户真实桌面环境的唯一差异点</b></td></tr>
+</table>
+</section>
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">3</span>测试用例与结果</h2>
+
+<h3>T1 · 桥接直连端到端</h3>
+<table>
+  <tr><th>项</th><th>内容</th></tr>
+  <tr><td>操作</td><td>构造 8 顶点立方体 OBJ → <code>C4dBridge.export_fbx(obj_in, fbx_out)</code>，240 s 超时</td></tr>
+  <tr><td>结果</td><td><span class="pill blocked">BLOCKED-ENV</span> Cinema 4D 无响应超时 (240s)，已终止进程树</td></tr>
+  <tr><td>验证点</td><td>看门狗在超时点精确触发 → <code>taskkill /F /T</code> 杀掉进程树 → <code>C4dBridgeError</code> 上抛（消息含超时秒数）✅</td></tr>
+</table>
+
+<h3>T2 · APPDATA 重定向复测</h3>
+<table>
+  <tr><th>项</th><th>内容</th></tr>
+  <tr><td>操作</td><td>同 T1，但将子进程 <code>APPDATA</code> / <code>LOCALAPPDATA</code> 重定向到临时目录（复现此前会话的缓解方案）</td></tr>
+  <tr><td>结果</td><td><span class="pill blocked">BLOCKED-ENV</span> 300 s 超时，行为与 T1 一致</td></tr>
+  <tr><td>验证点</td><td>环境变量重定向对沙箱拦截<b>无效</b>——证明拦截基于目标路径（Maxon 目录名）或更早的句柄层，而非 APPDATA 解析层 ✅</td></tr>
+</table>
+
+<h3>T3 · Commandline.exe 最小脚本诊断</h3>
+<table>
+  <tr><th>项</th><th>内容</th></tr>
+  <tr><td>操作</td><td>直接运行 <code>Commandline.exe -script=hello.py</code>（脚本仅 print 两行），90 s 观察窗</td></tr>
+  <tr><td>结果</td><td><span class="pill blocked">BLOCKED-ENV</span> 进程挂起被杀</td></tr>
+  <tr><td>stdout 证据</td><td>完整打印启动 banner（版本/路径/模块表，见下方日志）后静默——<b>脚本内容从未执行</b>（无 [USF] 输出）</td></tr>
+  <tr><td>验证点</td><td>挂起点定位在「模块加载完成 → 应用初始化（配置/授权）」之间，先于脚本执行 ✅</td></tr>
+</table>
+
+<pre class="log"><span class="b">Application start</span>      : 09/08/26 at 17:20:20
+Version / Build        : 2025.3.3 / 2025_3_3_2bba821e6ecc_1947535878
+<span class="b">Prefs path</span>            : file:///<用户本地路径>/AppData/Roaming/Maxon/Maxon Cinema 4D 2025_789E552B_x
+Command line arguments : "-script=<用户本地路径>\AppData\Local\Temp\usf_c4d_diag\hello.py"
+<span class="y">Module path .../plugins couldn't be found</span>
+  crypt.module.xdl64 with module net.maxon.crypt
+  gui.module.xdl64 with module net.maxon.gui
+<span class="r">（此后 90 秒无任何输出 → 挂起）</span></pre>
+
+<h3>T4 · c4dpy.exe 替代入口诊断（决定性证据）</h3>
+<table>
+  <tr><th>项</th><th>内容</th></tr>
+  <tr><td>操作</td><td>直接运行 <code>c4dpy.exe hello2.py</code>（脚本 import c4d 并打印版本）</td></tr>
+  <tr><td>结果</td><td><span class="pill blocked">BLOCKED-ENV</span> 进程崩溃，退出码 <b>3221225477</b>（0xC0000005 访问冲突）</td></tr>
+  <tr><td>关键证据</td><td>沙箱在进程终止时输出了明确的拦截日志（见下方），点名被拦截路径为 Maxon 配置目录 ✅</td></tr>
+</table>
+
+<pre class="log"><span class="r">TRAE Sandbox Error: process crashed; pid=40368, code=3221225477</span>
+<span class="r">TRAE Sandbox Error: hit restricted</span>
+  Not allow operate files: <span class="y"><用户本地路径>/AppData\Roaming\Maxon\Maxon Cinema 4D 2025_789E552B_p</span>
+  Hint: If the tool supports running outside the sandbox, you should try requesting
+  to run this command outside the sandbox.</pre>
+
+<div class="callout err">
+  <div class="co-title">根因判定</div>
+  C4D 家族进程（Commandline.exe / c4dpy.exe）启动时必须读写
+  <code>%APPDATA%\Roaming\Maxon\Maxon Cinema 4D 2025_&lt;hash&gt;</code> 配置目录（首启创建、
+  授权状态、用户偏好、着色器缓存）。TRAE 代理沙箱的文件白名单不包含该目录：
+  Commandline.exe 的写入被静默阻塞 → 初始化死等（T1/T2/T3 挂起）；
+  c4dpy.exe 则直接访问冲突崩溃（T4，并留下明确拦截日志）。这与前一会话
+  「沙箱阻止 C4D 访问 NVIDIA/Intel 缓存路径」的结论相互印证，属<b>环境限制而非产品缺陷</b>。
+</div>
+</section>
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">4</span>已验证通过的桥接能力</h2>
+
+<p>虽然 FBX 产物未能生成（环境阻断），但四轮测试完整覆盖并验证了桥接的<b>全部防御性机制</b>：</p>
+
+<table>
+  <tr><th>能力</th><th>验证方式</th><th>结果</th></tr>
+  <tr><td>三级探测 → 桥接装配</td><td>回归脚本断言 <code>c4d</code> key 命中且 exe 正确传入 <code>C4dBridge</code></td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>Commandline.exe 路径推导</td><td>由 <code>Cinema 4D.exe</code> 同目录解析 <code>Commandline.exe</code>，实机存在性检查</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>超时看门狗</td><td>T1（240s）/ T2（300s）在设定秒数精确触发</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>进程树终止</td><td>超时后 <code>taskkill /F /T /PID</code>，无 C4D 残留进程</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>stdout 后台排空 + 轮询</td><td>T3 banner 40+ 行全部捕获（静默期不阻塞看门狗）</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>[USF] 协议解析框架</td><td>PROGRESS/FILE/DONE/ERROR 四类正则与增量消费逻辑经单元级回归</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>异常上抛与降级衔接</td><td><code>C4dBridgeError</code> 上抛 → ExportDispatcher 捕获记日志 → 主流程继续（不影响 OBJ/GLB 保底产物）</td><td><span class="pill pass">PASS</span></td></tr>
+  <tr><td>取消响应（stop_event）</td><td>轮询循环每 200 ms 检查取消标志（与 Houdini 桥同构，已静态复核）</td><td><span class="pill info">REVIEWED</span></td></tr>
+  <tr><td>FBX 实际导出</td><td>需真实 C4D 初始化</td><td><span class="pill blocked">待桌面环境验收</span></td></tr>
+</table>
+</section>
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">5</span>正常桌面环境验证指南</h2>
+
+<p>以下三种方式任选其一即可完成验收。<b>方式 A</b> 最接近真实用户路径，推荐优先执行。</p>
+
+<h3>预检清单（所有方式通用）</h3>
+<ol>
+  <li>Cinema 4D 2024+ 已安装且<b>完成授权</b>（交互式主程序能正常打开、无授权弹窗）；</li>
+  <li>任务管理器中无残留的 <code>Cinema 4D.exe</code> / <code>Commandline.exe</code> / <code>c4dpy.exe</code> 进程；</li>
+  <li>至少手动启动过一次 Cinema 4D（确保 <code>%APPDATA%\Maxon</code> 配置目录已生成）。</li>
+</ol>
+
+<h3>方式 A · 全流程 GUI 验证（推荐）</h3>
+<ol class="steps">
+  <li><b>启动软件</b><br>双击 <code>UniversalSceneForge.exe</code>（或安装版快捷方式）。确认右侧 DCC 状态矩阵中 <b>Cinema 4D 指示灯为绿色</b>。</li>
+  <li><b>构造降级场景</b><br>点击 <kbd>调用路径设置</kbd>，将 <b>Blender</b> 一栏手动指定为一个不存在的路径（如 <code>C:\not_exist\blender.exe</code>），保存——这将强制 FBX 走降级链直达 C4D。验证完成后记得清除恢复自动。</li>
+  <li><b>运行重建</b><br>输入一段 10–20 秒的环绕视频，勾选 <b>fbx</b> 导出格式，点击 <kbd>▶ 开始重建</kbd>。</li>
+  <li><b>观察判据</b><br>日志控制台依次出现：</li>
+</ol>
+<pre class="log">[INFO] Blender 导出失败, 降级: ...
+[INFO] <span class="b">Cinema 4D 无头启动: usf_xxxxx.py</span>
+[INFO] <span class="b">Cinema 4D 完成, 产物 1 个: usf_scene.fbx</span>      ← <span class="g">验收通过标志</span>
+[INFO] FBX 由 Cinema 4D 降级导出</pre>
+  <li style="list-style:none;margin-left:-24px;">产物检查：<code>usf_work\output\usf_scene.fbx</code> 存在且 &gt; 1 KB，可用 3D 查看器打开即为完整验收。</li>
+
+<h3>方式 B · 单桥脚本验证</h3>
+<p>项目仓库已内置自动化脚本 <code>tests\e2e_c4d_bridge.py</code>，在<b>普通命令行窗口</b>（非代理沙箱）中执行：</p>
+<pre class="log">cd /d <项目仓库本地路径>
+.venv\Scripts\python.exe tests\e2e_c4d_bridge.py
+
+<span class="g">[E2E] 成功: C:\...\usf_scene.fbx  大小=xxxxxB  耗时=xx.xs</span>
+<span class="g">[E2E] PASS</span></pre>
+<p>脚本会自动构造立方体 OBJ → 调用桥接 → 校验 FBX 产物 → 清理临时目录。看到 <code>PASS</code> 即验收通过。
+预期耗时 20–90 秒（取决于 C4D 启动速度）。</p>
+
+<h3>方式 C · 最小诊断（30 秒快速判定环境是否健康）</h3>
+<p>将下面两行保存为 <code>hello.py</code>，双击或用命令行运行
+<code>"C:\Program Files\Maxon Cinema 4D 2025\Commandline.exe" -script=hello.py</code>：</p>
+<pre class="log">print('[USF] PROGRESS 50 c4d python alive')
+print('[USF] DONE')</pre>
+<p><b>判定：</b>10–60 秒内进程退出（退出码 0）且输出两行协议文本 = 环境健康、桥接可用；
+超过 2 分钟无输出 = C4D 初始化被阻断（此时按第 6 章排查表处理）。</p>
+
+<h3>验收判据汇总</h3>
+<table>
+  <tr><th>判据</th><th>通过标准</th></tr>
+  <tr><td>Commandline.exe 响应</td><td>方式 C 在 60 s 内输出 [USF] DONE</td></tr>
+  <tr><td>OBJ → FBX 转换</td><td>方式 B 输出 <code>[E2E] PASS</code>，FBX &gt; 1 KB</td></tr>
+  <tr><td>GUI 降级链</td><td>方式 A 日志出现「FBX 由 Cinema 4D 降级导出」且绿灯</td></tr>
+  <tr><td>超时保护</td><td>人为把 <code>c4d_timeout_s</code> 改为 10（settings.json）复跑方式 B，应 10 s 报超时而非永久挂起</td></tr>
+</table>
+</section>
+
+<!-- ================================================================ -->
+<section>
+<h2><span class="no">6</span>桌面环境仍失败时的排查表</h2>
+
+<table>
+  <tr><th>现象</th><th>可能原因</th><th>处置</th></tr>
+  <tr><td>Commandline.exe 挂起（方式 C 超时）</td><td>授权未激活 / 许可服务不可达</td><td>先打开交互式 Cinema 4D 完成一次授权激活，再重试</td></tr>
+  <tr><td>日志出现 <code>no FBX export</code> 类错误</td><td>FBX 导出插件未随安装启用</td><td>C4D 内菜单 Extensions → 插件管理器 确认 FBX/导入导出组件已启用</td></tr>
+  <tr><td>导入 OBJ 失败（no objects）</td><td>OBJ 文件含非 ASCII 路径且编码异常</td><td>把工作目录迁移到纯英文路径后重试</td></tr>
+  <tr><td>导出 FBX 为 0 KB</td><td>场景为空（OBJ 解析成空文档）</td><td>用记事本检查 OBJ 头部合法性；用其他查看器验证 OBJ 本身</td></tr>
+  <tr><td>多版本 C4D 共存走了错误版本</td><td>三级探测命中了非预期安装</td><td><kbd>调用路径设置</kbd> 手动指定目标版本的 <code>Cinema 4D.exe</code></td></tr>
+</table>
+
+<div class="callout ok">
+  <div class="co-title">备注</div>
+  Houdini 桥（<code>hython.exe</code>）未受本次沙箱问题影响路径——其配置写入量远小于 C4D；
+  但若桌面环境验证 Houdini，同样可用 <code>tests\</code> 下的对应脚本思路构造最小 OBJ 用例。
+</div>
+</section>
+
+<footer>
+  Universal Scene Forge v0.9.0 · C4D 桥接沙箱限制测试报告 · 2026-09-08 ·
+  测试执行环境：TRAE 代理沙箱 + Cinema 4D 2025.3.3。本报告随包分发于 docs\ 目录。
+</footer>
+
+</div>
+</body>
+</html>

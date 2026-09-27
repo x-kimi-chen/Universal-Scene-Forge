@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="9.0"
+    ExtensionBundleId="com.universalsceneforge.prfexport"
+    ExtensionBundleVersion="1.0.0"
+    ExtensionBundleName="USF PR Frame Exporter"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ExtensionList>
+    <Extension Id="com.universalsceneforge.prfexport.panel" Version="1.0.0"/>
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <!-- Premiere Pro 2019 (13.x) 起支持 exportFrameJPEG/新脚本 API -->
+      <Host Name="PPRO" Version="[13.0,99.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <!-- CEP 9 清单可被 CEP 9~12(Premiere 2019~2025+) 向后兼容加载 -->
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.universalsceneforge.prfexport.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./jsx/frame_exporter.jsx</ScriptPath>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>USF 抽帧导出</Menu>
+          <Geometry>
+            <Size>
+              <Height>520</Height>
+              <Width>360</Width>
+            </Size>
+            <MinSize>
+              <Height>300</Height>
+              <Width>260</Width>
+            </MinSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

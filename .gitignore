@@ -1,0 +1,33 @@
+# ---- Python 运行产物 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- 虚拟环境（依赖以 requirements.txt 声明，不入库）----
+.venv/
+external/*/.venv/
+
+# ---- 构建/分发产物（由 pyinstaller spec + usf_setup.nsi 重新生成）----
+build/
+dist/
+installer/*.exe
+
+# ---- 第三方大件：本地获取，不入库（详见 THIRD_PARTY_LICENSES.md）----
+# INRIA gaussian-splatting：非商业研究用途许可，本仓库不再分发其代码；
+# 由用户自行 git clone --recursive 获取（见 README「训练环境」）。
+external/gaussian-splatting/
+# COLMAP 预编译包：运行时由「依赖体检」从官方 Releases 下载。
+tools/colmap/
+
+# ---- 用户本地配置（含本机路径；模板见 settings.example.json）----
+settings.json
+
+# ---- 测试临时产物 ----
+tests/_tmp_*/
+
+# ---- 流水线默认输出目录 ----
+usf_work/
+
+# ---- IDE / 编辑器 ----
+.idea/
+.vscode/

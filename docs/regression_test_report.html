@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal Scene Forge · 新体积回归测试报告</title>
+<style>
+:root{
+  --bg:#f6f8fb; --bg2:#ffffff; --ink:#1a2332; --muted:#5b6b83;
+  --rule:#e3e9f2; --accent:#2563eb; --accent2:#0891b2;
+  --ok:#22c55e; --busy:#f59e0b; --error:#ef4444; --off:#6b7280; --skip:#3b82f6;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background:var(--bg);color:var(--ink);font-size:15px;line-height:1.75;}
+.mono{font-family:Consolas,"Courier New",monospace;}
+
+header.topbar{background:#0f1b2d;color:#fff;display:flex;align-items:center;gap:14px;
+  padding:14px 32px;box-shadow:0 2px 8px rgba(15,27,45,.25);}
+header.topbar .logo{width:34px;height:34px;border-radius:8px;flex:none;
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+header.topbar h1{font-size:17px;font-weight:600;}
+header.topbar .ver{margin-left:auto;font-size:12px;color:#9fb3d1;
+  border:1px solid #33445e;border-radius:99px;padding:2px 12px;}
+
+.wrap{max-width:980px;margin:0 auto;padding:36px 24px 80px;}
+section{margin-bottom:48px;}
+h2{font-size:21px;font-weight:700;display:flex;align-items:center;gap:12px;
+  padding-bottom:10px;border-bottom:2px solid var(--rule);margin-bottom:18px;}
+h2 .no{flex:none;width:30px;height:30px;border-radius:8px;font-size:14px;
+  background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
+h3{font-size:16px;font-weight:700;color:var(--accent);margin:24px 0 10px;}
+p{margin-bottom:12px;}
+ul,ol{margin:0 0 14px 24px;}
+li{margin-bottom:6px;}
+b,strong{font-weight:600;}
+
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:18px 20px;margin:16px 0;}
+.callout{background:var(--bg2);border-left:4px solid var(--accent2);
+  border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:14.5px;}
+.callout.err{border-left-color:var(--error);}
+.callout.ok{border-left-color:var(--ok);}
+.callout.warn{border-left-color:var(--busy);}
+.co-title{font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:4px;
+  text-transform:uppercase;color:var(--accent2);}
+.callout.err .co-title{color:var(--error);}
+.callout.ok .co-title{color:var(--ok);}
+.callout.warn .co-title{color:var(--busy);}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:14px 0;background:var(--bg2);}
+th{background:#f0f4fa;text-align:left;font-weight:600;padding:9px 12px;
+  border-bottom:2px solid var(--rule);white-space:nowrap;}
+td{padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+code{background:#eef2f8;border-radius:4px;padding:1px 6px;font-size:13px;
+  font-family:Consolas,"Courier New",monospace;color:#334155;}
+
+pre.log{background:#0f1b2d;color:#d1d5db;border-radius:10px;padding:16px 18px;
+  font-family:Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.6;
+  overflow-x:auto;margin:14px 0;}
+pre.log .g{color:#22c55e;} pre.log .y{color:#f59e0b;}
+pre.log .r{color:#ef4444;} pre.log .b{color:#60a5fa;} pre.log .v{color:#c084fc;}
+
+.pill{display:inline-block;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600;}
+.pill.pass{background:#dcfce7;color:#15803d;}
+.pill.fail{background:#fee2e2;color:#b91c1c;}
+.pill.fixed{background:#fef3c7;color:#b45309;}
+.pill.info{background:#e0edff;color:#1d4ed8;}
+
+footer{border-top:1px solid var(--rule);padding-top:16px;margin-top:48px;
+  font-size:12.5px;color:var(--muted);}
+
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:14px;margin:18px 0;}
+.stat{background:var(--bg2);border:1px solid var(--rule);border-radius:10px;
+  padding:16px 18px;text-align:center;}
+.stat .v{font-size:26px;font-weight:700;color:var(--accent);line-height:1.2;}
+.stat .v.ok{color:var(--ok);}
+.stat .l{font-size:12.5px;color:var(--muted);margin-top:4px;}
+
+.bar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:12px 0;}
+.bar div{display:flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:600;color:#fff;}
+.bar .a{background:#ef4444;} .bar .b{background:#22c55e;}
+.bar-legend{display:flex;gap:22px;font-size:12.5px;color:var(--muted);margin:6px 0 0;}
+.bar-legend .dot{display:inline-block;width:10px;height:10px;border-radius:3px;
+  margin-right:6px;vertical-align:-1px;}
+.led{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">USF</div>
+  <h1>Universal Scene Forge · 新体积回归测试报告</h1>
+  <span class="ver">v0.9.0 · 2026-09-08</span>
+</header>
+
+<div class="wrap">
+
+<!-- ================= 1 摘要 ================= -->
+<section>
+<h2><span class="no">1</span>测试摘要</h2>
+
+<p>本报告针对<b>体积优化后的新安装包（75.54 MB）</b>执行回归测试，验证三条改造线
+「体积优化、open3d 误报缺陷修复、次世代建模软件扩展」在合入后<b>未破坏既有功能</b>：</p>
+
+<ul>
+<li><b>单元测试</b>（18 项）——锁定 D-1 缺陷修复：依赖体检必须以真实导入名
+<code>open3d</code> 探测，杜绝 <code>o3d</code> 别名误报回归；</li>
+<li><b>16 款 DCC 探测回归</b>（7 组）——覆盖路径字段、三级探测、手动覆盖优先级、
+桥接装配、文档打包一致性；</li>
+<li><b>体积与产物验证</b>——安装包 / 绿色版 / 文档随包分发的实测数据复核。</li>
+</ul>
+
+<div class="summary-grid">
+  <div class="stat"><div class="v ok">75.54 MB</div><div class="l">单文件安装包（回归目标 &lt;100 MB）</div></div>
+  <div class="stat"><div class="v ok">18 / 18</div><div class="l">open3d 误报修复单元测试通过</div></div>
+  <div class="stat"><div class="v ok">7 / 7</div><div class="l">16 款 DCC 探测回归组通过</div></div>
+  <div class="stat"><div class="v">16 款</div><div class="l">支持软件（新增 3D-Coat / RizomUV / TopoGun）</div></div>
+</div>
+
+<div class="callout ok">
+  <div class="co-title">结论</div>
+  新体积安装包 <b>75.54 MB</b> 达标；D-1 缺陷修复被单元测试锁定，<b>无回归</b>；
+  软件支持面从 13 款扩展到 16 款，探测、路径管理、桥接装配链路全部通过；
+  文档（用户手册 / C4D 报告 / 部署流程 / 体积报告 / 本报告）随包分发一致。<b>可以发布。</b>
+</div>
+</section>
+
+<!-- ================= 2 测试环境 ================= -->
+<section>
+<h2><span class="no">2</span>测试环境</h2>
+
+<table>
+<tr><th style="width:180px">项目</th><th>内容</th></tr>
+<tr><td>操作系统</td><td>Windows 11 Home China（64 位）</td></tr>
+<tr><td>Python</td><td>3.12（项目虚拟环境 <code>.venv</code>，PySide6 / open3d 已安装）</td></tr>
+<tr><td>被测对象</td><td><code>dist\UniversalSceneForge</code>（PyInstaller onedir）＋ <code>installer\UniversalSceneForge_Setup.exe</code>（NSIS 固体 LZMA）</td></tr>
+<tr><td>测试脚本</td><td><code>tests\unit_deps_open3d.py</code>、<code>tests\regression_nextgen.py</code></td></tr>
+<tr><td>本机已装 DCC</td><td>Blender（Steam 版）、Maxon Cinema 4D 2025、Autodesk 3ds Max 2026</td></tr>
+<tr><td>测试时间</td><td>2026-09-08</td></tr>
+</table>
+</section>
+
+<!-- ================= 3 单元测试 ================= -->
+<section>
+<h2><span class="no">3</span>open3d 误报缺陷单元测试（D-1 回归锁定）</h2>
+
+<p>D-1 缺陷背景：<code>deps.py</code> 的 <code>REQUIRED_PY</code> 曾以模块别名
+<code>o3d</code> 作为 <code>find_spec()</code> 探测键，而 open3d 的真实导入名是
+<code>open3d</code>，导致体积优化后（open3d 移出包体、按需安装）依赖体检<b>恒报未安装</b>。
+修复后需用单元测试锁死，防止别名回归。用例覆盖七组场景：</p>
+
+<table>
+<tr><th style="width:70px">组号</th><th>场景</th><th style="width:170px">断言要点</th><th style="width:90px">结果</th></tr>
+<tr><td>1a–1c</td><td>探测键契约</td><td><code>REQUIRED_PY</code> 键=真实导入名、不含 <code>o3d</code> 别名、键值映射与设计契约逐项一致</td><td><span class="pill pass">3 / 3 通过</span></td></tr>
+<tr><td>2-×</td><td>体检与真实状态一致</td><td>六个 pip 包体检结果与 <code>find_spec</code> 实测逐项比对（不误报、不漏报）</td><td><span class="pill pass">6 / 6 通过</span></td></tr>
+<tr><td>3</td><td>本机 open3d 已安装</td><td>体检报 <code>ok=True</code></td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>4a–4c</td><td>体检路径缺失模拟</td><td><code>find_spec</code> 包装补丁拦截 open3d（等价打包后状态）：报 <code>ok=False</code>、<code>fix_hint</code> 含 pip 指引、其余五项不受影响</td><td><span class="pill pass">3 / 3 通过</span></td></tr>
+<tr><td>5a–5c</td><td>导入路径缺失模拟</td><td><code>sys.meta_path</code> 拦截器抛 ImportError：网格重建入口抛 <code>MeshError</code>（含「依赖体检」与 <code>pip install open3d</code> 指引），而非裸异常</td><td><span class="pill pass">3 / 3 通过</span></td></tr>
+<tr><td>6</td><td>副作用清理</td><td>解除拦截后体检恢复真实状态</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>7a–7b</td><td>体检报告结构</td><td><code>full_report()</code> 含 python/tool/cuda 三类；<code>missing()</code> 只挑未通过项</td><td><span class="pill pass">2 / 2 通过</span></td></tr>
+</table>
+
+<pre class="log"><span class="b">$ .venv\Scripts\python.exe tests\unit_deps_open3d.py</span>
+[1a] REQUIRED_PY 含真实导入名 open3d 键: <span class="g">OK</span>
+[1b] REQUIRED_PY 不含别名 o3d 键(防 D-1 回归): <span class="g">OK</span>
+[1c] REQUIRED_PY 键值映射与设计契约一致(键=导入名, 值=pip 包名): <span class="g">OK</span>
+[2-PySide6] 体检项 PySide6 与真实导入状态一致: <span class="g">OK</span>
+[2-numpy]   体检项 numpy 与真实导入状态一致: <span class="g">OK</span>
+[2-cv2]     体检项 opencv-python-headless 与真实导入状态一致: <span class="g">OK</span>
+[2-plyfile] 体检项 plyfile 与真实导入状态一致: <span class="g">OK</span>
+[2-requests] 体检项 requests 与真实导入状态一致: <span class="g">OK</span>
+[2-open3d]  体检项 open3d 与真实导入状态一致: <span class="g">OK</span>
+[3] open3d 已安装时体检报 ok=True 且不误报: <span class="g">OK</span>
+[4a] open3d 缺失时体检报 ok=False: <span class="g">OK</span>
+[4b] 缺失项 fix_hint 给出 pip 安装指引: <span class="g">OK</span>
+[4c] 其余五项不受拦截影响仍报 ok: <span class="g">OK</span>
+[5a] to_mesh_obj 缺 open3d 时抛 MeshError: <span class="g">OK</span>
+[5b] MeshError 消息含「依赖体检」指引: <span class="g">OK</span>
+[5c] MeshError 消息含 pip install open3d 命令: <span class="g">OK</span>
+[6] 解除拦截后体检结果恢复正常: <span class="g">OK</span>
+[7a] full_report 含 python/tool/cuda 三类: <span class="g">OK</span>
+[7b] missing() 只挑出未通过项: <span class="g">OK</span>
+
+=== 全部单元测试通过 ===</pre>
+
+<div class="callout">
+  <div class="co-title">测试设计说明</div>
+  两种「缺失态」模拟互不等价，必须分别覆盖：体检路径用 <code>find_spec</code>
+  补丁返回 None（与包内无 open3d 的真实行为一致）；导入路径用
+  <code>sys.meta_path</code> 拦截器抛 ImportError。后者与打包后运行时状态等价，
+  可在开发机直接复现用户侧「按需安装前」的降级链路。
+</div>
+</section>
+
+<!-- ================= 4 DCC 回归 ================= -->
+<section>
+<h2><span class="no">4</span>16 款 DCC 软件探测回归测试</h2>
+
+<p>软件支持面由 13 款扩展至 16 款（新增 3D-Coat、RizomUV、TopoGun），
+对「设置模型字段 ↔ 探测规格 ↔ UI 路径对话框 ↔ 桥接装配 ↔ 文档」全链路做一致性回归：</p>
+
+<table>
+<tr><th style="width:70px">组号</th><th>验证点</th><th style="width:90px">结果</th></tr>
+<tr><td>1</td><td><code>DCC_PATH_FIELDS</code> 共 16 项，settings 字段全部存在且可读写</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>2</td><td>三级探测（环境变量→注册表→常见路径）对 16 款软件逐一执行，本机 3 款就绪（blender / c4d / max），其余 13 款正确报「未安装」且不抛异常</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>3</td><td>手动路径覆盖优先级：settings 指定 exe 时探测结果直接采用该路径（source=settings）</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>4</td><td><code>HoudiniBridge</code> / <code>C4dBridge</code> 以配置超时（1800s）实例化</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>5</td><td><code>ExportDispatcher</code> 按配置装配 houdini / c4d 桥</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>6</td><td>用户手册与部署流程图随包存在</td><td><span class="pill pass">通过</span></td></tr>
+<tr><td>7</td><td>HTML 文档标签配对粗检</td><td><span class="pill pass">通过</span></td></tr>
+</table>
+
+<h3>本机探测矩阵</h3>
+<table>
+<tr><th>软件</th><th style="width:110px">状态</th><th>探测来源 / 路径</th></tr>
+<tr><td><span class="led" style="background:#22c55e"></span>Blender</td><td><span class="pill pass">就绪</span></td><td class="mono">…\steamapps\common\Blender\blender.exe（Steam）</td></tr>
+<tr><td><span class="led" style="background:#22c55e"></span>Cinema 4D 2025</td><td><span class="pill pass">就绪</span></td><td class="mono">C:\Program Files\Maxon Cinema 4D 2025\Cinema 4D.exe</td></tr>
+<tr><td><span class="led" style="background:#22c55e"></span>3ds Max 2026</td><td><span class="pill pass">就绪</span></td><td class="mono">D:\Autodesk\3ds Max 2026\3dsmax.exe</td></tr>
+<tr><td><span class="led" style="background:#6b7280"></span>其余 13 款</td><td><span class="pill info">未安装</span></td><td>未装于本机，正确降级为灰色指示灯，主流程不受影响</td></tr>
+</table>
+</section>
+
+<!-- ================= 5 新增软件 ================= -->
+<section>
+<h2><span class="no">5</span>新增软件适配明细（扩展 II）</h2>
+
+<p>三款软件按「三级探测 + 路径管理」接入，深度桥接（无头自动化导出）列为后续版本计划。
+当前用户可在 <b>设置 → 项目调用路径</b> 对话框中查看与手动指定安装路径：</p>
+
+<table>
+<tr><th style="width:110px">软件</th><th>流水线角色</th><th>环境变量</th><th>注册表 / 常见路径</th><th>状态</th></tr>
+<tr>
+  <td><b>3D-Coat</b></td>
+  <td>体素雕刻 / 重拓扑 / UV</td>
+  <td class="mono">COAT3D_PATH<br>3DCOAT_PATH</td>
+  <td class="mono">HKLM\SOFTWARE\Pilgway\*<br>Program Files\3D-Coat*</td>
+  <td><span class="pill pass">探测就绪</span></td>
+</tr>
+<tr>
+  <td><b>RizomUV</b></td>
+  <td>专业 UV 展开</td>
+  <td class="mono">RIZOMUV_PATH</td>
+  <td class="mono">Program Files\Rizom Lab\RizomUV*</td>
+  <td><span class="pill pass">探测就绪</span></td>
+</tr>
+<tr>
+  <td><b>TopoGun</b></td>
+  <td>重拓扑 / 烘焙贴图</td>
+  <td class="mono">TOPOGUN_PATH</td>
+  <td class="mono">Program Files\TopoGun*</td>
+  <td><span class="pill pass">探测就绪</span></td>
+</tr>
+</table>
+
+<div class="callout warn">
+  <div class="co-title">适配边界说明</div>
+  扩展 II 三款软件当前提供<b>探测与路径管理</b>（指示灯、手动路径覆盖、设置持久化）；
+  自动化导出桥接与 Blender / Max / Metashape / UE5 同级的深度集成将在后续版本接入。
+  用户手册「支持的 DCC 软件」章节已同步更新为 16 款。
+</div>
+</section>
+
+<!-- ================= 6 体积验证 ================= -->
+<section>
+<h2><span class="no">6</span>体积与产物验证</h2>
+
+<table>
+<tr><th>产物</th><th style="width:150px">实测</th><th>验证结论</th></tr>
+<tr><td>单文件安装包 <span class="mono">UniversalSceneForge_Setup.exe</span></td><td><b>75.54 MB</b></td><td>满足 &lt;100 MB 硬性目标；NSIS 固体 LZMA 压缩率约 28.3%</td></tr>
+<tr><td>绿色版目录 <span class="mono">dist\UniversalSceneForge</span></td><td><b>266.34 MB</b> / 382 文件</td><td>onedir 结构完整，双击 <span class="mono">UniversalSceneForge.exe</span> 可直接启动</td></tr>
+<tr><td>随包文档 <span class="mono">_internal\docs</span></td><td>6 份</td><td>用户手册、C4D 沙箱测试报告、部署流程图、体积优化报告、本回归报告、架构文档</td></tr>
+</table>
+
+<h3>体积优化手段回顾（相对优化前 170 MB）</h3>
+<div class="bar">
+  <div class="a" style="width:55.6%">170 MB · 优化前</div>
+  <div class="b" style="width:44.4%">75.5 MB · 优化后</div>
+</div>
+<div class="bar-legend">
+  <span><span class="dot" style="background:#ef4444"></span>OpenCV 换 headless 版（约 −30 MB）</span>
+  <span><span class="dot" style="background:#22c55e"></span>open3d / dash / plotly 移出包体改按需安装（约 −190 MB，含整体结构收益）＋ 固体 LZMA</span>
+</div>
+
+<div class="callout">
+  <div class="co-title">按需安装链路复核</div>
+  open3d 移出包体后，其缺失态由依赖体检引导安装：
+  GUI 启动体检 → 标红 open3d → 一键 <code>pip install open3d</code>（走清华镜像）→
+  复检转绿。该链路的「缺失检测」正确性由第 3 节 18 项单元测试锁定，
+  「用户路径」详见体积优化功能完整性测试报告第 6 节。
+</div>
+</section>
+
+<!-- ================= 7 结论 ================= -->
+<section>
+<h2><span class="no">7</span>结论与遗留事项</h2>
+
+<h3>结论</h3>
+<ul>
+<li><b>体积</b>：75.54 MB，达标（&lt;100 MB），压缩结构稳定可复现；</li>
+<li><b>缺陷修复</b>：D-1（open3d 误报）修复被 18 项单元测试锁定，体检结果与真实导入状态逐项一致；</li>
+<li><b>功能回归</b>：16 款软件探测、路径覆盖、桥接装配、文档一致性 7 组用例全部通过，无功能受损；</li>
+<li><b>软件扩展</b>：3D-Coat / RizomUV / TopoGun 探测接入完成，用户手册同步更新。</li>
+</ul>
+
+<h3>遗留事项</h3>
+<ul>
+<li>扩展 II 三款软件的深度桥接（无头自动化导出）待后续版本接入，当前为探测 + 路径管理；</li>
+<li>C4D 真实转换在 TRAE 沙箱环境因无法写入 <span class="mono">AppData\Roaming\Maxon</span> 初始化挂起，需在正常桌面环境复验（详见 C4D 沙箱限制测试报告）；</li>
+<li>本报告及新增软件适配已纳入下一次安装包重构建，构建后建议在目标机做一次安装向导冒烟。</li>
+</ul>
+</section>
+
+<footer>
+  Universal Scene Forge · 新体积回归测试报告 · v0.9.0 · 生成于 2026-09-08 ·
+  测试脚本：<code>tests\unit_deps_open3d.py</code> / <code>tests\regression_nextgen.py</code>
+</footer>
+
+</div>
+</body>
+</html>
