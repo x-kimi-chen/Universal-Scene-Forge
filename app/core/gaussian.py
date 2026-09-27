@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -24,6 +25,16 @@ ProgressCb = Callable[[int, int, str], None]   # (iter, total, msg)
 _ITER_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 
 
+def _free_tcp_port() -> int:
+    """取一个当前空闲的 TCP 端口: train.py 的 GUI 监听用, 防并行端口冲突。"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+    finally:
+        s.close()
+
+
 class GaussianTrainError(RuntimeError):
     pass
 
@@ -31,11 +42,13 @@ class GaussianTrainError(RuntimeError):
 class GaussianEngine:
     def __init__(self, gs_repo: Path, python_exe: Optional[str] = None,
                  progress_cb: Optional[ProgressCb] = None,
-                 stop_event: Optional[threading.Event] = None):
+                 stop_event: Optional[threading.Event] = None,
+                 cuda_accel: bool = False):
         self.repo = Path(gs_repo)
         self.python = self._resolve_python(python_exe)
         self.progress_cb = progress_cb
         self.stop_event = stop_event or threading.Event()
+        self.cuda_accel = cuda_accel
 
     # ------------------------------------------------------------------ #
     def _resolve_python(self, python_exe: Optional[str]) -> str:
@@ -72,12 +85,30 @@ class GaussianEngine:
                 f"--recursive {self.repo}\n"
                 f"并在其中创建训练环境（README「训练环境」一节）")
         model_dir.mkdir(parents=True, exist_ok=True)
+        # 子进程 cwd=仓库目录, 数据集/模型路径必须转绝对路径, 否则 train.py
+        # 在仓库下找不到 sparse/ 而报 "Could not recognize scene type!"。
+        dataset_dir = Path(dataset_dir).resolve()
+        model_dir = Path(model_dir).resolve()
         cmd = [
             self.python, str(train_py),
             "-s", str(dataset_dir),
             "-m", str(model_dir),
             "--iterations", str(iterations),
+            # train.py 无头启动仍会绑定 GUI 监听端口(默认 6006 固定值):
+            # 并行两个重建 / 残留训练进程时会 WinError 10048 端口冲突直接崩。
+            # 每次分配随机空闲端口根治。
+            "--port", str(_free_tcp_port()),
         ]
+        # 渲染效率(实测 2500 迭代 +8.7%): data_device=cuda 将图像常驻显存,
+        # 免去每次迭代的 H2D 拷贝。帧数过多时显存压力大(约 4MB/帧@1280x720),
+        # 超过 250 帧自动回退默认 cpu, 防止 OOM。
+        if self.cuda_accel:
+            imgs = dataset_dir / "images"
+            n = sum(1 for p in imgs.iterdir() if p.is_file()) \
+                if imgs.is_dir() else 0
+            if 0 < n <= 250:
+                cmd += ["--data_device", "cuda"]
+                log.info("CUDA 加速: data_device=cuda (帧数 %d)", n)
         env = os.environ.copy()
         env.setdefault("CUDA_VISIBLE_DEVICES", "0")  # 多卡机器默认用 0 号
         log.info("3DGS 训练启动: %s 迭代 %d", model_dir.name, iterations)

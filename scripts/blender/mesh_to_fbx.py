@@ -199,10 +199,11 @@ def build_lod(obj, ratio, name):
 def bake_ao_passthrough():
     try:
         scene = bpy.context.scene
+        prev_engine = scene.render.engine   # 还原原引擎, 兼容 2.8x~5.x 名称差异
         scene.render.engine = "CYCLES"
         scene.cycles.samples = 64
         usf_log("AO 烘焙跳过: 无头模式下需显式提供烘焙目标图像, 已按顶点色输出")
-        scene.render.engine = "BLENDER_EEVEE"
+        scene.render.engine = prev_engine
     except Exception as exc:  # noqa: BLE001
         usf_log(f"AO 烘焙跳过: {exc}")
 
@@ -263,6 +264,43 @@ def export_blend(path):
     usf_file(path)
 
 
+def _usd_export_kwargs(fmt="USDA"):
+    """按 RNA 探测 usd_export 参数名(跨版本: 4.x/5.x 属性名有差异)。
+
+    - 顶点色: export_colors (4.x) / 5.x 可能更名;
+    - 选择集: use_selection / selected_objects_only;
+    - 格式枚举: 4.x 叫 export_format, 5.x 属性名不同 —— 统一按
+      "枚举项含 USDA 的属性" 定位, 值取 USDA(ASCII 可读)。
+    """
+    try:
+        props = bpy.ops.wm.usd_export.get_rna_type().properties
+    except (AttributeError, RuntimeError):
+        return {}
+    kw = {}
+    for name in ("export_colors",):
+        if name in props:
+            kw[name] = True
+    for name in ("use_selection", "selected_objects_only"):
+        if name in props:
+            kw[name] = True
+            break
+    for prop in props:
+        if getattr(prop, "type", "") == "ENUM":
+            items = [i.identifier for i in (prop.enum_items or [])]
+            if "USDA" in items:
+                kw[prop.identifier] = fmt if fmt in items else "USDA"
+                break
+    return kw
+
+
+def export_usd(objs, path):
+    """USD 导出: 现代管线通用格式, 保留顶点色。生成 .usda(ASCII 可读)。"""
+    for o in bpy.data.objects:
+        o.select_set(o in objs)
+    bpy.ops.wm.usd_export(filepath=str(path), **_usd_export_kwargs())
+    usf_file(path)
+
+
 # --------------------------------------------------------------------- #
 #  主流程
 # --------------------------------------------------------------------- #
@@ -310,12 +348,22 @@ def main():
         for obj in objs:
             lod_objs.append(build_lod(obj, ratio, f"{obj.name}_LOD{i}"))
         for fmt in formats:
+            if fmt == "blend":
+                continue                      # blend 循环外整包单独保存
             dst = out_dir / f"{tag}.{fmt}"
-            if fmt == "fbx":
-                export_fbx(lod_objs, dst)
-            elif fmt in ("glb", "gltf"):
-                export_glb(lod_objs, dst)
-            files_out.append(dst)
+            try:                              # 单格式失败不截断其余产物
+                if fmt == "fbx":
+                    export_fbx(lod_objs, dst)
+                elif fmt in ("glb", "gltf"):
+                    export_glb(lod_objs, dst)
+                elif fmt in ("usd", "usda", "usdc"):
+                    dst = out_dir / f"{tag}.usda"
+                    export_usd(lod_objs, dst)
+                else:
+                    continue
+                files_out.append(dst)
+            except Exception as exc:  # noqa: BLE001
+                usf_log(f"导出 {fmt} 失败(LOD{i}): {exc}")
         outputs.extend(lod_objs)
 
     # .blend 单独整包保存（含所有 LOD）

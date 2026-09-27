@@ -11,7 +11,11 @@
   "poisson_depth": 9,
   "opacity_threshold": 0.35,
   "density_quantile": 0.02,
-  "lod_ratios": [1.0, 0.5, 0.25],
+  "lod_ratios": [
+    1.0,
+    0.5,
+    0.25
+  ],
   "blender_exe": null,
   "metashape_exe": null,
   "maya_exe": null,
@@ -31,6 +35,8 @@
   "topogun_exe": null,
   "premiere_exe": null,
   "enable_metashape_repair": false,
+  "enable_cuda_accel": true,
+  "export_dir": null,
   "enable_ue5_preview": true,
   "blender_timeout_s": 3600,
   "metashape_timeout_s": 14400,
@@ -39,8 +45,17 @@
   "ue5_timeout_s": 900,
   "houdini_timeout_s": 1800,
   "c4d_timeout_s": 1800,
-  "export_formats": ["fbx", "obj", "glb", "blend", "uasset"],
+  "export_formats": [
+    "fbx",
+    "obj",
+    "glb",
+    "blend",
+    "uasset"
+  ],
   "bake_ao": false,
   "pip_mirror": "ustc",
-  "allow_silent_install": false
+  "allow_silent_install": false,
+  "enable_rizomuv": true,
+  "rizomuv_timeout_s": 1800,
+  "modo_timeout_s": 3600
 }

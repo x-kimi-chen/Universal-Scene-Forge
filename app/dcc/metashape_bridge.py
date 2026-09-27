@@ -71,6 +71,11 @@ class MetashapeBridge:
             raise MetashapeBridgeError(f"缺少桥接脚本: {script}")
 
         env = os.environ.copy()
+        # 剥掉主程序(GUI/冻结 exe)的 Qt 环境变量: 否则 Metashape 内嵌解释器
+        # 会扫描到我们的 PySide6 插件目录, 刷屏 "Invalid metadata version"。
+        for k in list(env):
+            if k.upper().startswith("QT_"):
+                del env[k]
         env["USF_METASHAPE_PARAMS"] = param_file
         cmd = [self.exe, "-r", str(script)]
         log.info("Metashape 无头启动 (洞穴修复): %s 帧 → %s", frames_dir, mesh_out.name)

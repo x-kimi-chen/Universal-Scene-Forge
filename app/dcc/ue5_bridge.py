@@ -33,6 +33,36 @@ class UE5BridgeError(RuntimeError):
     pass
 
 
+def ensure_preview_uproject(editor_cmd: str, base_dir: Path) -> Optional[str]:
+    """自动生成最小 UE 预览工程(蓝图空工程 + PythonScriptPlugin)。
+
+    让 UE5 实时预览环节在没有 .uproject 的机器上开箱可用(环节可用化)。
+    引擎版本从 UnrealEditor-Cmd.exe 路径解析(如 .../UE_5.7/... → "5.7")。
+    返回 uproject 路径; 失败返回 None。
+    """
+    try:
+        m = re.search(r"UE_([0-9.]+)", editor_cmd)
+        version = m.group(1).rstrip(".") if m else "5.0"
+        pdir = Path(base_dir).resolve() / "USFPreview"   # 绝对路径: 相对路径 UE 找不到
+        uproject = pdir / "USFPreview.uproject"
+        if not uproject.exists():
+            pdir.mkdir(parents=True, exist_ok=True)
+            data = {
+                "FileVersion": 3,
+                "EngineAssociation": version,
+                "Category": "",
+                "Description": "Universal Scene Forge auto preview project",
+                "Modules": [],
+                "Plugins": [{"Name": "PythonScriptPlugin", "Enabled": True}],
+            }
+            uproject.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            log.info("已自动生成 UE 预览工程: %s (引擎 %s)", uproject, version)
+        return str(uproject)
+    except OSError as exc:
+        log.error("生成 UE 预览工程失败: %s", exc)
+        return None
+
+
 class UE5Bridge:
     def __init__(self, editor_cmd: str, uproject: str, timeout_s: int = 900,
                  log_cb: Optional[LogCb] = None,
@@ -108,11 +138,16 @@ class UE5Bridge:
             except OSError:
                 pass
 
-        if code != 0:
+        # 退出码非零但 ASSET 行已产出: 导入已发生, 仅保存阶段中断
+        # (Commandlet 下保存可能触发引擎断言) —— 降级为警告。
+        if code != 0 and not imported:
             tail = "\n".join(lines[-10:])
             raise UE5BridgeError(
                 f"UE5 导入失败 (退出码 {code})。"
                 f"请确认工程已启用 Python Editor Script Plugin。\n{tail}")
+        if code != 0:
+            log.warning("UE5 导入完成 %d 项, 但退出码 %d (保存可能未落盘)",
+                        len(imported), code)
         log.info("UE5 推流完成: %s", imported or destination)
         return imported
 

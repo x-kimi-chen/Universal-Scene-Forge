@@ -211,7 +211,11 @@ check("C04c", "INGEST 失败 → 后续阶段留档为「未执行」而非连�
       _sfm_rec is not None and _sfm_rec.skipped
       and "未执行" in _sfm_rec.message and not _sfm_rec.ok,
       str(_sfm_rec))
-check("C04d", "8 个阶段全部留档(1 失败 + 7 跳过)", len(_ctrl2.state.records) == 8,
+from app.models.project import Stage as _StageEnum
+STAGE_ORDER_ALL = [s.value for s in _StageEnum if s.name not in
+                   ("INIT", "DONE", "FAILED")]
+check("C04d", "全部阶段级联留档(1 失败 + 其余跳过)",
+      len(_ctrl2.state.records) == len(STAGE_ORDER_ALL),
       str(len(_ctrl2.state.records)))
 
 _readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -243,20 +247,29 @@ check("C06", "探测日志无 Unicode 标记(✔/✘), GBK 采集不再出现 \\
       _logs[:150])
 
 # --------------------------------------------------------------- #
-# D-02) Windows 资源版本 + 版本号 0.9.4
+# D-02) Windows 资源版本 + 版本号三处一致(app / version_info / NSIS)
+#       (改为一致性校验: 版本会随发布推进, 不再硬编码具体数字)
 # --------------------------------------------------------------- #
 import app as app_mod
 
-check("D02a", "版本号升级 0.9.4", app_mod.__version__ == "0.9.4",
-      app_mod.__version__)
-_vfile = ROOT / "installer" / "version_info.txt"
-check("D02b", "PyInstaller version 资源文件存在且含 0.9.4",
-      _vfile.exists() and "0.9.4" in _vfile.read_text(encoding="utf-8"))
+_ver = app_mod.__version__
+_base = _ver.split("-")[0]           # "0.9.5-preview" -> "0.9.5"
+_parts = tuple(int(x) for x in _base.split("."))
+
+check("D02a", "版本号存在且符合 x.y.z(-后缀)格式",
+      len(_parts) == 3 and all(p >= 0 for p in _parts), _ver)
+_vfile_txt = (ROOT / "installer" / "version_info.txt").read_text(
+    encoding="utf-8")
+check("D02b", "PyInstaller version 资源与 app 版本一致",
+      f"FileVersion', '{_ver}'" in _vfile_txt
+      or f"'{_ver}'" in _vfile_txt, _ver)
 _spec = (ROOT / "installer" / "UniversalSceneForge.spec").read_text(
     encoding="utf-8")
 check("D02c", "spec 挂接 version 资源(--version-file)", "version_info.txt" in _spec)
 _nsi = (ROOT / "installer" / "usf_setup.nsi").read_text(encoding="utf-8-sig")
-check("D02d", "NSIS 版本同步 0.9.4", '"0.9.4"' in _nsi and "0.9.4.0" in _nsi)
+_vi = ".".join(str(p) for p in _parts) + ".0"
+check("D02d", "NSIS 版本同步(app 版本 + VIProductVersion)",
+      _base in _nsi and _vi in _nsi)
 check("D02e", "NSIS 写入卸载注册表 InstallLocation(C-01)", "InstallLocation" in _nsi)
 check("D02f", "NSIS 快捷方式走所有用户上下文(C-07)",
       _nsi.count("SetShellVarContext all") >= 2)

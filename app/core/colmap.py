@@ -111,14 +111,22 @@ class SfmRunner:
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+        tail: List[str] = []   # 输出尾部: 失败时随异常带出, 否则用户只看到退出码
         for line in proc.stdout or []:
-            log.debug("colmap| %s", line.rstrip())
+            text = line.rstrip()
+            if text:
+                log.info("colmap| %s", text[:300])
+                tail.append(text)
+                if len(tail) > 15:
+                    tail.pop(0)
             if self.stop_event.is_set():
                 proc.kill()
                 raise SfmError("用户取消")
         code = proc.wait()
         if code != 0:
-            raise SfmError(f"COLMAP 退出码 {code}: {' '.join(cmd[:3])} ...")
+            detail = "\n".join(tail[-8:]) if tail else "（无输出）"
+            raise SfmError(f"COLMAP 退出码 {code}: {' '.join(cmd[:3])} ...\n"
+                           f"—— COLMAP 输出尾部 ——\n{detail}")
 
     def _report(self, done: int, total: int, msg: str) -> None:
         if self.progress_cb:

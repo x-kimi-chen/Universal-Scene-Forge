@@ -18,6 +18,7 @@ from typing import Callable, List, Optional
 
 import requests
 
+from app.utils import gpu
 from app.utils.logger import get_logger
 
 log = get_logger("INSTALLER")
@@ -58,6 +59,8 @@ OFFICIAL_SOURCES = {
     "colmap": {
         # GitHub 直连在部分地区超时/限速, gh-proxy/ghfast 为 GitHub Releases
         # 加速镜像(同一文件的转发), 兜底顺序: 官方 → gh-proxy → ghfast。
+        # urls = CUDA 版(仅 NVIDIA); urls_cpu = 无 CUDA 版(AMD/Intel/核显,
+        # SIFT 走 CPU, 速度较慢但功能完整) —— 按厂商自动选择。
         "urls": [
             "https://github.com/colmap/colmap/releases/download/3.9.1/"
             "COLMAP-3.9.1-windows-cuda.zip",
@@ -65,6 +68,14 @@ OFFICIAL_SOURCES = {
             "download/3.9.1/COLMAP-3.9.1-windows-cuda.zip",
             "https://ghfast.top/https://github.com/colmap/colmap/releases/"
             "download/3.9.1/COLMAP-3.9.1-windows-cuda.zip",
+        ],
+        "urls_cpu": [
+            "https://github.com/colmap/colmap/releases/download/3.9.1/"
+            "COLMAP-3.9.1-windows-no-cuda.zip",
+            "https://gh-proxy.com/https://github.com/colmap/colmap/releases/"
+            "download/3.9.1/COLMAP-3.9.1-windows-no-cuda.zip",
+            "https://ghfast.top/https://github.com/colmap/colmap/releases/"
+            "download/3.9.1/COLMAP-3.9.1-windows-no-cuda.zip",
         ],
         "exe_globs": ["COLMAP-*/COLMAP.bat", "COLMAP.bat"],
     },
@@ -129,22 +140,29 @@ class AutoInstaller:
         dest_dir.mkdir(parents=True, exist_ok=True)
         zip_path = dest_dir / f"{key}.zip"
 
+        # COLMAP 按显卡厂商选择版本(BUG-011): CUDA 版仅在 NVIDIA 可用,
+        # AMD/Intel/核显下载 no-cuda 版本, SIFT 走 CPU。
+        urls = spec["urls"]
+        if key == "colmap" and not gpu.probe().is_nvidia \
+                and spec.get("urls_cpu"):
+            urls = spec["urls_cpu"]
+            log.info("检测到非 NVIDIA 显卡, COLMAP 选用无 CUDA 版本（CPU SIFT）")
+
         downloaded = False
         last_exc: Optional[Exception] = None
-        for i, url in enumerate(spec["urls"], start=1):
+        for i, url in enumerate(urls, start=1):
             try:
-                log.info("下载 %s（源 %d/%d）← %s",
-                         key, i, len(spec["urls"]), url)
+                log.info("下载 %s（源 %d/%d）← %s", key, i, len(urls), url)
                 self._download(url, zip_path)
                 downloaded = True
                 break
             except (OSError, requests.RequestException) as exc:
                 last_exc = exc
                 log.warning("下载源 %d/%d 失败（%s）, 尝试下一个…",
-                            i, len(spec["urls"]), exc)
+                            i, len(urls), exc)
         if not downloaded:
             log.error("安装 %s 失败: 全部 %d 个下载源均不可用（最后错误: %s）",
-                      key, len(spec["urls"]), last_exc)
+                      key, len(urls), last_exc)
             zip_path.unlink(missing_ok=True)
             return None
 

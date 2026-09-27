@@ -22,13 +22,15 @@ class ExportDispatcher:
 
     def __init__(self, blender_bridge=None, ue5_bridge=None,
                  max_bridge=None, maya_bridge=None,
-                 houdini_bridge=None, c4d_bridge=None):
+                 houdini_bridge=None, c4d_bridge=None,
+                 modo_bridge=None):
         self.blender = blender_bridge
         self.ue5 = ue5_bridge
         self.max = max_bridge
         self.maya = maya_bridge
         self.houdini = houdini_bridge
         self.c4d = c4d_bridge
+        self.modo = modo_bridge
 
     def export_all(self, mesh_obj: Path, out_dir: Path,
                    formats: List[str], base_name: str = "usf_scene",
@@ -39,7 +41,7 @@ class ExportDispatcher:
         results: Dict[str, List[Path]] = {}
 
         want = {f.lower() for f in formats}
-        blender_formats = want & {"fbx", "glb", "gltf", "blend"}
+        blender_formats = want & {"fbx", "glb", "gltf", "blend", "usd"}
         direct_formats = want - blender_formats - {"uasset"}
 
         if blender_formats and self.blender:
@@ -75,6 +77,8 @@ class ExportDispatcher:
                  lambda: [self.houdini.export_fbx(mesh_obj, fbx_out)]),
                 ("Cinema 4D", self.c4d,
                  lambda: [self.c4d.export_fbx(mesh_obj, fbx_out)]),
+                ("Modo", self.modo,
+                 lambda: [self.modo.export_fbx(mesh_obj, fbx_out)]),
             ]
             for name, bridge, fn in chain:
                 if bridge is None or results.get("fbx"):
@@ -89,8 +93,13 @@ class ExportDispatcher:
             try:
                 files = self.ue5.import_files([mesh_obj], destination="/Game/USF")
                 results["uasset"] = [Path(f) for f in files] if files else []
+                if not results["uasset"]:
+                    log.warning("UE5 导入未产出 uasset (检查 .uproject 与引擎日志)")
             except Exception as exc:  # noqa: BLE001
                 log.error("UE5 导入失败: %s", exc)
+        elif "uasset" in want:
+            log.warning("uasset 需要 UE5: 在「调用路径设置」中配置引擎与 .uproject "
+                        "工程后重试, 其余格式不受影响")
         return results
 
     # ------------------------------------------------------------------ #
@@ -107,10 +116,23 @@ class ExportDispatcher:
     @staticmethod
     def _export_obj_lods(mesh_obj: Path, out_dir: Path, base_name: str,
                          lod_ratios: List[float]) -> List[Path]:
-        """无 Blender 保底: 复制主 OBJ, 并用 Open3D 生成 LOD OBJ。"""
+        """无 Blender 保底: 复制主 OBJ(+材质/纹理随行文件), 并用 Open3D 生成 LOD OBJ。"""
+        import re as _re
         import shutil as _sh
         outputs: List[Path] = [out_dir / f"{base_name}.obj"]
         _sh.copy2(mesh_obj, outputs[0])
+        # 材质随行(完整性): 只拷 .obj 会丢 mtl/纹理 → 模型"能开但没材质"。
+        mtl = mesh_obj.with_suffix(".mtl")
+        if mtl.exists():
+            _sh.copy2(mtl, out_dir / f"{base_name}.mtl")
+            try:
+                text = mtl.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            for ref in _re.findall(r"^\s*map_\S+\s+(.+?)\s*$", text, flags=_re.M):
+                tex = mesh_obj.parent / Path(ref.strip()).name
+                if tex.exists():
+                    _sh.copy2(tex, out_dir / tex.name)
         if len(lod_ratios) > 1:
             try:
                 import open3d as o3d
@@ -123,6 +145,6 @@ class ExportDispatcher:
                     p = out_dir / f"{base_name}_lod{i}.obj"
                     o3d.io.write_triangle_mesh(str(p), lod, write_vertex_colors=True)
                     outputs.append(p)
-            except ImportError:
-                log.warning("open3d 缺失, 仅导出主 OBJ")
+            except Exception:  # noqa: BLE001 导入/生成失败(含线程内 DLL 初始化)不阻断
+                log.warning("open3d 缺失或不可用, 仅导出主 OBJ")
         return outputs

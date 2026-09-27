@@ -100,6 +100,11 @@ class PipelineSettings:
     # 输入侧工具（非导出 DCC, 不计入 DCC 探测网格）
     premiere_exe: Optional[str] = None  # Adobe Premiere Pro, 高效抽帧用
     enable_metashape_repair: bool = False  # 需 Metashape Professional 授权
+    enable_cuda_accel: bool = True     # CUDA 加速: COLMAP 特征提取/匹配走 GPU
+                                       # （3DGS 训练本身始终用 GPU, 不受此项影响）
+    enable_rizomuv: bool = True        # RizomUV 自动展 UV (需安装 RizomUV VS/RS)
+    rizomuv_timeout_s: int = 1800
+    modo_timeout_s: int = 3600
     enable_ue5_preview: bool = True
     blender_timeout_s: int = 3600
     metashape_timeout_s: int = 14_400
@@ -112,6 +117,7 @@ class PipelineSettings:
     # ---- 导出 ----
     export_formats: List[str] = field(
         default_factory=lambda: ["fbx", "obj", "glb", "blend", "uasset"])
+    export_dir: Optional[str] = None   # 导出位置: None = 自动(输入源旁 usf_work/output)
     bake_ao: bool = False              # Blender 内 Cycles AO 烘焙（可选）
 
     # ---- 依赖管理 / 安装行为 ----

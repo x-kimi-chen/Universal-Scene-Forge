@@ -8,13 +8,13 @@ ManifestDPIAware true
 SetCompressor /SOLID lzma   ; 固体 LZMA 压缩: 单文件安装包体积最优
 
 !define APPNAME     "Universal Scene Forge"
-!define APPVERSION  "0.9.4"
+!define APPVERSION  "0.9.5-preview"
 !define COMPANY     "USF Project"
 !define APPID       "{8F4B2C1D-9A7E-4D3F-B5C6-1E2A3B4C5D6E}"
 !define DISTDIR     "..\dist\UniversalSceneForge"
 
 Name "${APPNAME} ${APPVERSION}"
-OutFile "UniversalSceneForge_Setup.exe"
+OutFile "UniversalSceneForge_0.9.5_Preview_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APPNAME}"
 InstallDirRegKey HKLM "Software\${APPNAME}" "InstallDir"
 RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注册表
@@ -41,11 +41,11 @@ RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注
 !insertmacro MUI_LANGUAGE "English"
 
 ; ---- 版本信息 ----
-VIProductVersion "0.9.4.0"
+VIProductVersion "0.9.5.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=2052 "FileDescription" "3DGS 场景重建与 DCC 自动化导出工具"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "${COMPANY}"
-VIAddVersionKey /LANG=2052 "FileVersion" "${APPVERSION}"
+VIAddVersionKey /LANG=2052 "FileVersion" "0.9.5-preview"
 
 Section "主程序" SecMain
     SectionIn RO
@@ -59,13 +59,19 @@ Section "主程序" SecMain
     SetRegView 64
 
     SetOutPath "$INSTDIR"
-    File /r "${DISTDIR}\*.*"
+    ; 用户数据保护(BUG-001/002): 不覆盖安装目录内已有的 external (可能含
+    ; 用户自建训练 venv) 与遗留 settings.json (旧版用户配置)。
+    File /r /x external /x settings.json "${DISTDIR}\*.*"
+    ${IfNot} ${FileExists} "$INSTDIR\external\gaussian-splatting\train.py"
+        File /r "${DISTDIR}\external"      ; 全新安装才同步训练仓库源码
+    ${EndIf}
 
     ; 开源合规: 许可证与第三方清单随包落盘（LGPL/GPL 组件声明义务, 见
     ; THIRD_PARTY_LICENSES.md §4）
     File "..\LICENSE"
     File "..\THIRD_PARTY_LICENSES.md"
     File "..\NOTICE"
+    File "..\CHANGELOG.md"
 
     ; 开始菜单 + 桌面快捷方式
     CreateDirectory "$SMPROGRAMS\${APPNAME}"
@@ -110,11 +116,32 @@ SectionEnd
 
 Function .onInit
     SetRegView 64   ; 本程序为 64 位, 注册表读写统一走 64 位视图(而非 WOW6432Node)
-    ; 重复安装检测
+
+    ; 预先结束可能占用安装目标文件的进程(BUG-006 缓解): 否则提权后弹出的
+    ; "无法打开要写入的文件" 对话框无法被自动化/普通权限操作关闭。
+    nsExec::Exec 'taskkill /F /IM UniversalSceneForge.exe'
+    Pop $0
+
+    ; 旧安装路径检测(BUG-003): 依次读 64 位主键 → 32 位遗留主键 → 卸载表
+    ; InstallLocation, 命中且目录有效时把目录页默认值切到旧路径, 实现"原地
+    ; 覆盖升级", 避免 C:/D: 两处安装并存、旧目录被遗弃成孤儿。
     ReadRegStr $R0 HKLM "Software\${APPNAME}" "InstallDir"
+    ${If} $R0 == ""
+        SetRegView 32
+        ReadRegStr $R0 HKLM "Software\${APPNAME}" "InstallDir"
+        SetRegView 64
+    ${EndIf}
+    ${If} $R0 == ""
+        ReadRegStr $R0 HKLM \
+            "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "InstallLocation"
+    ${EndIf}
     ${If} $R0 != ""
+    ${AndIf} ${FileExists} "$R0\UniversalSceneForge.exe"
+        StrCpy $INSTDIR "$R0"
         MessageBox MB_OKCANCEL|MB_ICONQUESTION \
-            "检测到已安装 ${APPNAME}, 将执行覆盖升级。" IDOK +2
+            "检测到已安装 ${APPNAME}:$\r$\n$R0$\r$\n$\r$\n\
+            将原地覆盖升级。用户训练环境 (external/.venv) 与配置将被保留。" IDOK +2
         Abort
     ${EndIf}
 FunctionEnd

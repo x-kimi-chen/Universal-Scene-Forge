@@ -148,6 +148,19 @@ footer{border-top:1px solid var(--rule);padding-top:16px;margin-top:48px;
 <header class="topbar">
   <div class="logo">USF</div>
   <h1>Universal Scene Forge · 用户手册</h1>
+<div style="border:1px solid #3b82f6;background:#eff6ff;border-radius:8px;padding:14px 18px;margin:14px 0;">
+<b style="color:#1d4ed8;">0.9.5-preview 新功能速览</b>
+<ul style="margin:8px 0 0 18px;">
+<li><b>导出位置</b>：重建参数区可指定最终模型输出目录（留空 = 自动 usf_work），完成后弹窗显示路径。</li>
+<li><b>CUDA 加速开关</b>：COLMAP 特征提取/匹配走 GPU（默认开启）；AMD/Intel 显卡自动回退 CPU 并提示。</li>
+<li><b>RizomUV 自动展 UV</b>（第 5 阶段，需安装 RizomUV）：未安装自动跳过，由 Blender 智能UV 兜底。</li>
+<li><b>USD 导出格式</b>：新增 .usda（ASCII，保留顶点色），导出参数按 Blender 版本自动适配。</li>
+<li><b>模糊帧自动剔除</b>：采集后自动剔除失焦/运动模糊帧（实测显著提升重建质量）。</li>
+<li><b>一键自动配置全部环境</b>：依赖体检对话框主按钮，一次确认完成 Python 库/工具/扩展/训练环境/路径配置。</li>
+<li><b>UE5 预览工程自动生成</b>：无 .uproject 时自动创建最小预览工程并推流。</li>
+<li><b>导出完整性保障链</b>：3DGS 网格 → Metashape 修复网格 → 自动补跑修复，保证产出模型。</li>
+</ul>
+</div>
   <span class="ver">v0.9.4 · 2026-09</span>
 </header>
 
@@ -237,7 +250,7 @@ FBX / OBJ / GLB / .blend / .uasset 等主流 DCC 格式。</p>
     抽帧上限填 <b>0 = 不限制</b>（抽取全部帧），帧率与迭代数可按需填大值。</li>
 
   <li><b>点击「▶ 开始重建」</b><br>
-    右侧进度条依次经过 8 个阶段；期间各 DCC 指示灯会实时变黄（执行中）→ 变绿（完成）/ 变红（失败跳过）。</li>
+    右侧进度条依次经过 9 个阶段；期间各 DCC 指示灯会实时变黄（执行中）→ 变绿（完成）/ 变红（失败跳过）。</li>
 
   <li><b>收产物</b><br>
     完成后在<b>输入源同级的 <code>usf_work/output/</code></b> 目录中收取模型：
@@ -553,7 +566,7 @@ FBX / OBJ / GLB / .blend / .uasset 等主流 DCC 格式。</p>
 <section id="s4">
 <h2><span class="no">4</span>重建流水线详解</h2>
 
-<p>点击「开始重建」后，数据依次经过 8 个阶段。每个阶段都有独立超时看门狗与容错包裹——
+<p>点击「开始重建」后，数据依次经过 9 个阶段。每个阶段都有独立超时看门狗与容错包裹——
 <b>单阶段失败不会中断整体流程</b>，只影响对应产物。</p>
 
 <table>
@@ -1746,7 +1759,7 @@ izomuv.exe</text>
 对话框顶部有<b>结论行</b>，直接回答「这些依赖够不够执行这个软件」：</p>
 
 <ul>
-  <li><b style="color:#16a34a;">✔ 依赖完整</b> —— GUI 与全部 8 个重建阶段（含 3DGS 训练）均可执行；</li>
+  <li><b style="color:#16a34a;">✔ 依赖完整</b> —— GUI 与全部 9 个重建阶段（含 3DGS 训练）均可执行；</li>
   <li><b style="color:#d97706;">◐ 基础流水线可运行</b> —— 采集 / SfM / 网格 / 导出正常，训练链缺少组件（红色行标注），按修复建议补齐即可；</li>
   <li><b style="color:#dc2626;">✘ N 项核心依赖缺失</b> —— 需先安装红色行组件；各阶段失败会自动跳过，不会阻断主流程。</li>
 </ul>

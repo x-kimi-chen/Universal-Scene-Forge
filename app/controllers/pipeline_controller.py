@@ -28,6 +28,8 @@ from app.dcc.metashape_bridge import MetashapeBridge
 from app.dcc.houdini_bridge import HoudiniBridge
 from app.dcc.c4d_bridge import C4dBridge
 from app.dcc.registry_probe import DCC_PATH_FIELDS, DccDetector, find_ue5_uproject
+from app.dcc.rizomuv_bridge import RizomuvBridge
+from app.dcc.modo_bridge import ModoBridge
 from app.dcc.ue5_bridge import UE5Bridge
 from app.models.project import ProjectState, Stage
 from app.models.settings import PipelineSettings
@@ -105,6 +107,7 @@ class PipelineController:
             (Stage.SFM.value, lambda: self._sfm(work_dir)),
             (Stage.TRAIN.value, lambda: self._train(work_dir)),
             (Stage.MESH.value, lambda: self._mesh(work_dir)),
+            (Stage.RIZOMUV.value, lambda: self._rizomuv_unwrap(work_dir)),
             (Stage.UE5_PREVIEW.value, lambda: self._ue5_preview(work_dir)),
             (Stage.DCC_POST.value, lambda: self._blender_post(work_dir)),
             (Stage.REPAIR.value, lambda: self._metashape_repair(work_dir)),
@@ -127,6 +130,9 @@ class PipelineController:
         ok = not self.failed_stages
         summary = (f"完成。产物 {len(self.state.all_artifacts)} 个"
                    if ok else f"完成(含跳过步骤): {', '.join(self.failed_stages)}")
+        out_dir = getattr(self, "_export_out_dir", None)
+        if ok and out_dir is not None:
+            summary += f" → {out_dir}"
         try:
             self.state.save(work_dir / "project.json")
         except OSError:
@@ -147,6 +153,7 @@ class PipelineController:
         frames = ing.collect_multi(
             sources, frames_dir, self.settings.frame_fps,
             self.settings.max_frames)
+        frames = ing.filter_blurry(frames)   # 剔除失焦/运动模糊帧
         frames = ing.preprocess(
             frames, self.settings.preprocess_max_side,
             self.settings.preprocess_workers)
@@ -160,8 +167,19 @@ class PipelineController:
         return frames
 
     def _sfm(self, work_dir: Path) -> Path:
+        # GPU 加速仅 NVIDIA (COLMAP CUDA SIFT 限制): AMD/Intel/核显自动回退
+        # CPU SIFT, 功能完整仅速度差异(BUG-011 厂商适配)。
+        use_gpu = self.settings.enable_cuda_accel
+        if use_gpu:
+            from app.utils.gpu import probe
+            if not probe().is_nvidia:
+                use_gpu = False
+                self.bus.log_line.emit(
+                    "WARNING", "COLMAP GPU 加速仅支持 NVIDIA 显卡; "
+                               "当前环境回退 CPU SIFT (结果一致, 速度较慢)")
         runner = SfmRunner(
             colmap_exe=self.settings.colmap_exe,
+            use_gpu=use_gpu,
             progress_cb=lambda d, t, m: self._report(10 + 10 * d / max(t, 1), m),
             stop_event=self.stop_event,
             tools_root=self.settings.tools_root)
@@ -179,7 +197,8 @@ class PipelineController:
             python_exe=str(python_exe) if python_exe else None,
             progress_cb=lambda cur, total, m: self._report(
                 20 + 35 * cur / max(total, 1), f"{m} {cur}/{total}"),
-            stop_event=self.stop_event)
+            stop_event=self.stop_event,
+            cuda_accel=self.settings.enable_cuda_accel)
         ply = engine.train(work_dir / "dataset", work_dir / "model",
                             self.settings.gs_iterations)
         self.state.register(Stage.TRAIN.value, [ply])
@@ -200,6 +219,58 @@ class PipelineController:
             self.bus.artifact.emit(str(f))
         return objs
 
+    def _best_meshes(self) -> List[Path]:
+        """可用网格回退链: 3DGS 泊松网格 → Metashape 摄影测量修复网格。
+
+        泼溅网格重建失败（open3d 缺失/有效高斯过少）但 Metashape 修复成功时,
+        修复网格同样是合法产物 —— 后处理/导出必须能落地, 不能因单一阶段
+        失败而让整个项目交白卷(C-07)。
+        """
+        meshes = [Path(f) for f in self.state.artifacts.get(Stage.MESH.value, [])]
+        if meshes:
+            # RizomUV 展过 UV 的网格优先: UV/贴图质量优于 Blender 兜底智能UV
+            uv_meshes = [Path(f) for f in
+                         self.state.artifacts.get(Stage.RIZOMUV.value, [])]
+            if uv_meshes:
+                return [Path(uv_meshes[0])]
+            return meshes
+        repaired = [Path(f) for f in self.state.artifacts.get(Stage.REPAIR.value, [])]
+        if repaired:
+            self.bus.log_line.emit(
+                "WARNING", "3DGS 网格缺失, 后处理/导出回退使用 Metashape 摄影测量网格")
+            log.warning("MESH 产物缺失, 回退使用 REPAIR 网格: %s", repaired[0])
+        return repaired
+
+    def _rizomuv_unwrap(self, work_dir: Path) -> Optional[List[Path]]:
+        """RizomUV 自动展 UV（可选环节, 未装/未启用优雅跳过）。
+
+        游戏资产 UV 是贴图质量的决定因素; RizomUV 的打包质量优于
+        Blender 兜底智能UV。展完的网格注册为 RIZOMUV 产物,
+        _best_meshes 会让后续阶段优先使用它。
+        """
+        if not self.settings.enable_rizomuv:
+            self.bus.dcc.emit("rizomuv", "skipped")
+            raise StageSkipped("未启用 RizomUV 自动展 UV")
+        info = self.dcc_infos.get("rizomuv")
+        if not info or not info.available:
+            self.bus.dcc.emit("rizomuv", "off")
+            raise StageSkipped(
+                "RizomUV 未安装, 展 UV 由 Blender 智能UV 兜底 (不影响导出)")
+        mesh_files = self._best_meshes()
+        if not mesh_files:
+            raise StageSkipped("无网格可展 UV")
+        self.bus.dcc.emit("rizomuv", "busy")
+        bridge = RizomuvBridge(
+            info.exe, timeout_s=self.settings.rizomuv_timeout_s,
+            log_cb=lambda l: self.bus.log_line.emit("INFO", f"rizomuv| {l}"),
+            stop_event=self.stop_event)
+        out = work_dir / "uv" / f"{mesh_files[0].stem}_uv.obj"
+        bridge.unwrap(mesh_files[0], out)
+        self.state.register(Stage.RIZOMUV.value, [out])
+        self.bus.artifact.emit(str(out))
+        self._report(68, "RizomUV 展 UV 完成")
+        return [out]
+
     def _ue5_preview(self, work_dir: Path) -> Optional[list]:
         """重建中间结果推流 UE5（容错: 未装 UE5 走 skipped 留档, 不算成功）。"""
         if not self.settings.enable_ue5_preview:
@@ -212,6 +283,15 @@ class PipelineController:
         uproject = self.settings.ue5_uproject or find_ue5_uproject(
             info.exe, [str(Path(self.settings.gs_repo).parent)])
         if not uproject:
+            # 环节可用化: 没有 .uproject 时自动生成最小预览工程(含
+            # PythonScriptPlugin), 首次打开 UE 需编译/着色器, 可能耗时较长。
+            from app.dcc.ue5_bridge import ensure_preview_uproject
+            uproject = ensure_preview_uproject(info.exe, work_dir)
+            if uproject:
+                self.settings.ue5_uproject = uproject
+                self.bus.log_line.emit(
+                    "INFO", f"已自动生成 UE 预览工程: {uproject}")
+        if not uproject:
             self.bus.dcc.emit("ue5", "off")
             raise StageSkipped("未找到 .uproject 工程, UE5 预览跳过")
         self.bus.dcc.emit("ue5", "busy")
@@ -219,7 +299,7 @@ class PipelineController:
                            timeout_s=self.settings.ue5_timeout_s,
                            log_cb=lambda l: self.bus.log_line.emit("INFO", f"ue5| {l}"),
                            stop_event=self.stop_event)
-        mesh_files = [Path(f) for f in self.state.artifacts.get(Stage.MESH.value, [])]
+        mesh_files = self._best_meshes()
         if not mesh_files:
             self.bus.dcc.emit("ue5", "skipped")
             raise StageSkipped("无网格产物可推送")
@@ -239,14 +319,14 @@ class PipelineController:
             progress_cb=lambda p, m: self._report(70 + 0.15 * p, f"Blender: {m}"),
             log_cb=lambda l: self.bus.log_line.emit("INFO", f"blender| {l}"),
             stop_event=self.stop_event)
-        mesh_files = [Path(f) for f in self.state.artifacts.get(Stage.MESH.value, [])]
+        mesh_files = self._best_meshes()
         if not mesh_files:
             raise RuntimeError("无网格可后处理")
         out = work_dir / "dcc"
         files = bridge.postprocess_mesh(
             mesh_in=mesh_files[0], out_dir=out, base_name="usf_scene",
             formats=[f for f in self.settings.export_formats
-                     if f in ("fbx", "glb", "gltf", "blend")],
+                     if f in ("fbx", "glb", "gltf", "blend", "usd")],
             lod_ratios=self.settings.lod_ratios,
             bake_ao=self.settings.bake_ao)
         self.bus.dcc.emit("blender", "ok")
@@ -256,6 +336,7 @@ class PipelineController:
         return files
 
     def _metashape_repair(self, work_dir: Path) -> Optional[List[Path]]:
+        self._repair_attempted = True   # 供 _export 兜底判断, 避免重复跑修复
         if not self.settings.enable_metashape_repair:
             self.bus.dcc.emit("metashape", "skipped")
             raise StageSkipped("未启用 Metashape 洞穴修复")
@@ -277,9 +358,35 @@ class PipelineController:
         return [repaired]
 
     def _export(self, work_dir: Path) -> dict:
-        mesh_files = [Path(f) for f in self.state.artifacts.get(Stage.MESH.value, [])]
+        mesh_files = self._best_meshes()
+
+        # 最后兜底(C-08): 到导出为止仍无任何网格, 且 Metashape 可用却尚未
+        # 尝试过修复(被关闭/未触发)时, 自动跑一次摄影测量修复 —— 保证项目
+        # 能交付出完整模型, 而不是交白卷。
+        if not mesh_files and not getattr(self, "_repair_attempted", False):
+            info = self.dcc_infos.get("metashape")
+            if info and info.available:
+                self.bus.log_line.emit(
+                    "WARNING", "尚无任何网格: 为保证产出模型, 自动执行 Metashape "
+                               "摄影测量修复 (兜底) …")
+                try:
+                    self._metashape_repair(work_dir)
+                except Exception as exc:  # noqa: BLE001
+                    self.bus.log_line.emit("ERROR", f"兜底修复失败: {exc}")
+                mesh_files = self._best_meshes()
+
         if not mesh_files:
-            raise RuntimeError("无网格可导出")
+            raise RuntimeError(
+                "无网格可导出（3DGS 网格、Metashape 修复网格均缺失; "
+                "请检查训练/网格阶段日志, 或在依赖体检中补装 open3d）")
+
+        # 导出位置(C-09): 用户设置的导出目录优先, 否则工作目录下 output/
+        if self.settings.export_dir:
+            out_dir = Path(self.settings.export_dir)
+            self.bus.log_line.emit("INFO", f"导出位置: {out_dir}")
+        else:
+            out_dir = work_dir / "output"
+        self._export_out_dir = out_dir
         blender = None
         bl_info = self.dcc_infos.get("blender")
         if bl_info and bl_info.available:
@@ -305,6 +412,11 @@ class PipelineController:
         if c4d_info and c4d_info.available:
             c4db = C4dBridge(c4d_info.exe, self.settings.c4d_timeout_s,
                              stop_event=self.stop_event)
+        modob = None
+        modo_info = self.dcc_infos.get("modo")
+        if modo_info and modo_info.available:
+            modob = ModoBridge(modo_info.exe, self.settings.modo_timeout_s,
+                               stop_event=self.stop_event)
         ue5 = None
         u_info = self.dcc_infos.get("ue5")
         if u_info and u_info.available and self.settings.ue5_uproject:
@@ -312,9 +424,10 @@ class PipelineController:
                             self.settings.ue5_timeout_s)
         dispatcher = ExportDispatcher(blender_bridge=blender, ue5_bridge=ue5,
                                       max_bridge=maxb, maya_bridge=mayab,
-                                      houdini_bridge=houdinib, c4d_bridge=c4db)
+                                      houdini_bridge=houdinib, c4d_bridge=c4db,
+                                      modo_bridge=modob)
         results = dispatcher.export_all(
-            mesh_files[0], work_dir / "output",
+            mesh_files[0], out_dir,
             formats=self.settings.export_formats,
             lod_ratios=self.settings.lod_ratios,
             bake_ao=self.settings.bake_ao)
@@ -322,7 +435,7 @@ class PipelineController:
         self.state.register(Stage.EXPORT.value, flat)
         for f in flat:
             self.bus.artifact.emit(str(f))
-        self._report(100, f"导出完成: {len(flat)} 个文件")
+        self._report(100, f"导出完成: {len(flat)} 个文件 → {out_dir}")
         return results
 
     # ------------------------------------------------------------------ #

@@ -43,9 +43,9 @@ log = get_logger("GUI")
 
 # 流水线 8 阶段（与 PipelineController.execute 的 stages 顺序一致）
 STAGE_ORDER = [Stage.INGEST.value, Stage.SFM.value, Stage.TRAIN.value,
-               Stage.MESH.value, Stage.UE5_PREVIEW.value,
+               Stage.MESH.value, Stage.RIZOMUV.value, Stage.UE5_PREVIEW.value,
                Stage.DCC_POST.value, Stage.REPAIR.value, Stage.EXPORT.value]
-STAGE_SHORT = ["采集", "SfM", "训练", "网格", "UE5", "后处理", "修复", "导出"]
+STAGE_SHORT = ["采集", "SfM", "训练", "网格", "展UV", "UE5", "后处理", "修复", "导出"]
 
 # 步骤条状态样式: (标记, 样式)
 STEP_STYLES = {
@@ -187,6 +187,15 @@ class DependencyDialog(QDialog):
         layout.addWidget(self.console)
 
         bottom = QHBoxLayout()
+        self.btn_auto = QPushButton("🚀 一键自动配置全部环境")
+        self.btn_auto.setMinimumHeight(32)
+        self.btn_auto.setStyleSheet("font-weight:bold;")
+        self.btn_auto.setToolTip(
+            "按顺序自动完成: 安装缺失 Python 库 → 工具便携版 (FFmpeg/COLMAP,"
+            " 按显卡厂商选版本) → DCC 扩展 → 训练环境 (可选) → DCC 路径写入设置。\n"
+            "单次确认后全程无需干预, 单项失败不阻断后续。")
+        self.btn_auto.clicked.connect(self._auto_config_all)
+        bottom.addWidget(self.btn_auto)
         self.btn_train = QPushButton("一键创建训练环境（自动下载安装）")
         self.btn_train.setToolTip(
             "全自动完成: 创建 .venv → 安装 torch+CUDA（cu128, 官方源失败自动回退"
@@ -378,6 +387,52 @@ class DependencyDialog(QDialog):
         self.refresh()
 
     # ------------------------------------------------------------------ #
+    def _auto_config_all(self):
+        """一键自动配置全部环境: 一次确认, 串行执行全部配置步骤。"""
+        rep = deps.full_report(self.settings)
+        pip_miss = [d.name for d in rep if d.kind == "python" and not d.ok]
+        tool_miss = [d.name for d in rep if d.kind == "tool" and not d.ok]
+        train_ok = all(d.ok for d in deps.check_training_env(self.settings))
+        lines = ["将按顺序自动执行:", "  1. 安装缺失 Python 库"
+                 + (f"（{', '.join(pip_miss)}）" if pip_miss else "（无缺失）"),
+                 "  2. 安装缺失工具"
+                 + (f"（{', '.join(tool_miss)}）" if tool_miss else "（无缺失）"),
+                 "  3. 安装 DCC 宿主扩展",
+                 "  4. 训练环境 (torch+CUDA, 约 10~40 分钟, 已就绪则自动跳过)",
+                 "  5. DCC 路径自动写入设置"]
+        box = QMessageBox(QMessageBox.Question, "一键自动配置全部环境",
+                          "<br>".join(lines), QMessageBox.Yes | QMessageBox.No,
+                          self)
+        box.setDefaultButton(QMessageBox.Yes)
+        cb = QCheckBox("包含训练环境创建 (未就绪才需要, 约 3GB 下载)")
+        cb.setChecked(not train_ok)
+        box.setCheckBox(cb)
+        if box.exec() != QMessageBox.Yes:
+            return
+        self.btn_auto.setEnabled(False)
+        for b in (self.btn_pip, self.btn_tools, self.btn_ext, self.btn_train):
+            b.setEnabled(False)
+        self.console.appendPlainText("")
+        self._auto_thread = _AutoConfigThread(
+            self.settings, self.mirror.currentData(), cb.isChecked())
+        self._auto_thread.log_line.connect(self.console.appendPlainText)
+        self._auto_thread.finished.connect(self._on_auto_done)
+        self._auto_thread.start()
+
+    def _on_auto_done(self):
+        self.btn_auto.setEnabled(True)
+        for b in (self.btn_pip, self.btn_tools, self.btn_ext, self.btn_train):
+            b.setEnabled(True)
+        self.refresh()
+        self.console.appendPlainText("· 汇总: "
+                                     + "; ".join(getattr(
+                                         getattr(self, "_auto_thread", None),
+                                         "summary", [])) or "· 完成")
+        QMessageBox.information(
+            self, "自动配置完成",
+            "全部环境配置流程已执行完毕, 汇总见上方控制台。\n"
+            "若训练环境下载量大, 期间请保持网络连接。")
+
     def _train_install(self):
         """一键创建训练环境: venv → torch+CUDA(多源回退) → 子模块 → 验证。"""
         repo = Path(self.settings.gs_repo)
@@ -429,6 +484,64 @@ class DependencyDialog(QDialog):
             "打开 CMD 粘贴执行: 创建 venv → 安装 torch(cu128) → 编译三个 CUDA 子模块。\n"
             "（推荐直接使用「一键创建训练环境」按钮, 无需手动执行）")
 
+
+def train_env_setup(settings: PipelineSettings, emit) -> bool:
+    """一键创建训练环境完整流程（独立按钮与「一键自动配置」共用）。
+
+    步骤: 预检 → 现状探测 → venv → torch+CUDA（多源回退） → CUDA 子模块
+    编译 → GPU 验证 → gs_python 写回。任一步失败即中止并给出修复指引。
+    """
+    repo = Path(settings.gs_repo)
+    emit("══ 一键创建训练环境开始 ══")
+
+    for d in (deps.check_msvc(), deps.check_cuda_toolkit()):
+        emit(("✔" if d.ok else "⚠") + f" 预检 {d.name}: {d.detail}")
+        if not d.ok:
+            emit(f"    {d.fix_hint}")
+
+    emit("── 检查现有环境（约 5~60 秒）──")
+    current = deps.check_training_torch(settings)
+    if current.ok:
+        emit(f"✔ 训练环境已就绪, 无需安装: {current.detail}")
+        emit("（如需强制重建: 删除 external/gaussian-splatting/.venv 后再点本按钮）")
+        return True
+    emit(f"○ 现状: {current.detail}")
+
+    py = deps.ensure_venv_for_training(repo)
+    if py is None:
+        emit("✘ 创建 venv 失败: 需要系统 Python（推荐 3.12 x64）")
+        return False
+    emit(f"✔ venv 就绪: {py}")
+
+    torch_ok = False
+    for label, cmd in deps.torch_install_steps(settings):
+        emit(f"── {label} ──")
+        emit("$ " + subprocess.list2cmdline(cmd))
+        if deps.run_streamed(cmd, emit) == 0:
+            torch_ok = True
+            break
+        emit(f"✘ {label} 失败, 尝试回退…")
+    if not torch_ok:
+        emit("✘ torch 安装失败: 官方源与交大镜像均不可用, "
+             "请检查网络后重试（已装部分不影响重试, pip 会断点续装）")
+        return False
+
+    cmd = deps.submodules_install_cmd(settings)
+    emit("── 编译安装 3 个 CUDA 子模块（本机编译, 约 5~20 分钟）──")
+    emit("$ " + subprocess.list2cmdline(cmd))
+    if deps.run_streamed(cmd, emit, env={"VSLANG": "1033"}) != 0:
+        emit("✘ 子模块编译失败: 请确认已安装 VS Build Tools"
+             "（C++ 生成工具）与 CUDA Toolkit 后重试本按钮")
+        return False
+
+    emit("── 验证 torch+CUDA ──")
+    d = deps.check_training_torch(settings)
+    emit(("✔" if d.ok else "✘") + f" {d.name}: {d.detail}")
+    if d.ok:
+        settings.gs_python = str(py)
+        settings.save()
+        emit("✔ 训练环境创建完成, 已保存到 settings（可直接开始重建）")
+    return d.ok
 
 class _PipThread(QThread):
     log_line = Signal(str)
@@ -527,62 +640,106 @@ class _TrainSetupThread(QThread):
         self.finished.connect(lambda: _bg_threads.discard(self))
 
     def run(self):
+        self.ok = train_env_setup(self.settings, self.log_line.emit)
+
+class _AutoConfigThread(QThread):
+    """一键自动配置全部环境: pip 缺失库 → 工具便携版 → DCC 扩展 →
+    训练环境(可选) → DCC 路径写入设置。单项失败不阻断后续步骤。"""
+    log_line = Signal(str)
+
+    def __init__(self, settings: PipelineSettings, mirror_key: str,
+                 include_train: bool):
+        super().__init__()
+        self.settings = settings
+        self.mirror_key = mirror_key
+        self.include_train = include_train
+        self.summary: list = []
+        _bg_threads.add(self)
+        self.finished.connect(lambda: _bg_threads.discard(self))
+
+    def run(self):
         emit = self.log_line.emit
-        repo = Path(self.settings.gs_repo)
-        emit("══ 一键创建训练环境开始 ══")
 
-        for d in (deps.check_msvc(), deps.check_cuda_toolkit()):
-            emit(("✔" if d.ok else "⚠") + f" 预检 {d.name}: {d.detail}")
-            if not d.ok:
-                emit(f"    {d.fix_hint}")
-
-        emit("── 检查现有环境（约 5~60 秒）──")
-        current = deps.check_training_torch(self.settings)
-        if current.ok:
-            emit(f"✔ 训练环境已就绪, 无需安装: {current.detail}")
-            emit("（如需强制重建: 删除 external\\gaussian-splatting\\.venv 后再点本按钮）")
-            self.ok = True
-            return
-        emit(f"○ 现状: {current.detail}")
-
-        py = deps.ensure_venv_for_training(repo)
-        if py is None:
-            emit("✘ 创建 venv 失败: 需要系统 Python（推荐 3.12 x64）")
-            return
-        emit(f"✔ venv 就绪: {py}")
-
-        torch_ok = False
-        for label, cmd in deps.torch_install_steps(self.settings):
-            emit(f"── {label} ──")
-            emit("$ " + subprocess.list2cmdline(cmd))
-            if deps.run_streamed(cmd, emit) == 0:
-                torch_ok = True
-                break
-            emit(f"✘ {label} 失败, 尝试回退…")
-        if not torch_ok:
-            emit("✘ torch 安装失败: 官方源与交大镜像均不可用, "
-                 "请检查网络后重试（已装部分不影响重试, pip 会断点续装）")
-            return
-
-        cmd = deps.submodules_install_cmd(self.settings)
-        emit("── 编译安装 3 个 CUDA 子模块（本机编译, 约 5~20 分钟）──")
-        emit("$ " + subprocess.list2cmdline(cmd))
-        # VSLANG=1033: GBK 代码页机器上 cl.exe 输出解码崩溃的已知规避
-        if deps.run_streamed(cmd, emit, env={"VSLANG": "1033"}) != 0:
-            emit("✘ 子模块编译失败: 请确认已安装 VS Build Tools"
-                 "（C++ 生成工具）与 CUDA Toolkit 后重试本按钮")
-            return
-
-        emit("── 验证 torch+CUDA ──")
-        d = deps.check_training_torch(self.settings)
-        emit(("✔" if d.ok else "✘") + f" {d.name}: {d.detail}")
-        self.ok = d.ok
-        if self.ok:
-            self.settings.gs_python = str(py)
-            self.settings.save()
-            emit("✔ 训练环境创建完成, 已保存到 settings（可直接开始重建）")
+        # [1/5] pip 缺失库
+        emit("══ [1/5] 安装缺失 Python 库 ══")
+        missing_pkgs = [d.package for d in deps.missing(deps.check_python())]
+        if not missing_pkgs:
+            emit("✔ Python 库完整, 跳过")
+            self.summary.append("Python 库: 已就绪")
+        elif deps.is_frozen() and deps.pip_interpreter() is None:
+            emit("⚠ 打包版需系统 Python 才能自动 pip 安装, 跳过")
+            self.summary.append("Python 库: 需系统 Python (跳过)")
         else:
-            emit(f"⚠ {d.fix_hint}")
+            proc = deps.pip_install(missing_pkgs, self.mirror_key)
+            for line in proc.stdout or []:
+                emit(line.rstrip())
+            code = proc.wait()
+            ok = code == 0
+            self.summary.append(f"Python 库: {'OK' if ok else '失败'}")
+            emit(("✔" if ok else "✘") + f" pip 安装退出码 {code}")
+
+        # [2/5] 工具便携版 (对话框已一次性征得同意)
+        emit("══ [2/5] 安装缺失工具 (官方多源回退) ══")
+        keys = [d.name for d in deps.missing(deps.check_tools(self.settings))
+                if d.name in OFFICIAL_SOURCES]
+        if not keys:
+            emit("✔ 工具已就绪 (FFmpeg / COLMAP), 跳过")
+            self.summary.append("工具: 已就绪")
+        else:
+            installer = AutoInstaller(
+                self.settings.tools_root,
+                consent_cb=lambda k: True, allow_silent=True,
+                progress_cb=lambda done, total:
+                    emit(f"  下载中… {done}/{total} 字节"))
+            for k in keys:
+                pth = installer.ensure(k)
+                emit(("✔" if pth else "✘") + f" {k}: {pth or '安装失败'}")
+            self.summary.append(f"工具: {', '.join(keys) or '无缺失'}")
+
+        # [3/5] DCC 宿主扩展
+        emit("══ [3/5] 安装 DCC 宿主扩展 ══")
+        exts = extension_manager.installable(self.settings)
+        if not exts:
+            emit("✔ 扩展均已就绪 (或宿主未装, 无需扩展)")
+            self.summary.append("DCC 扩展: 已就绪")
+        else:
+            for label, ok, detail in extension_manager.install_all(
+                    self.settings, emit):
+                emit(("✔" if ok else "✘") + f" {label}: {detail}")
+            self.summary.append("DCC 扩展: 已安装")
+
+        # [4/5] 训练环境 (重活, 用户勾选决定)
+        if self.include_train:
+            ok = train_env_setup(self.settings, emit)
+            self.summary.append(f"训练环境: {'OK' if ok else '未完成'}")
+        else:
+            emit("══ [4/5] 训练环境: 跳过 (未勾选) ══")
+            self.summary.append("训练环境: 跳过")
+
+        # [5/5] DCC 路径自动写入设置
+        emit("══ [5/5] DCC 路径自动配置 ══")
+        changed = []
+        for key, name, field in DCC_PATH_FIELDS:
+            if getattr(self.settings, field, None):
+                continue
+            infos = DccDetector(
+                {k: getattr(self.settings, f, None)
+                 for k, _n, f in DCC_PATH_FIELDS}).detect_all()
+            info = infos.get(key)
+            if info and info.available and info.exe:
+                setattr(self.settings, field, info.exe)
+                changed.append(name)
+        if changed:
+            self.settings.save()
+            emit("✔ 已写入设置: " + ", ".join(changed))
+            self.summary.append("DCC 路径: 已自动配置 " + ", ".join(changed))
+        else:
+            emit("✔ 所有探测到的 DCC 路径均已配置")
+            self.summary.append("DCC 路径: 已就绪")
+
+        emit("══ 一键自动配置全部完成 ══")
+        for s in self.summary:
+            emit("· " + s)
 
 
 class _MultiDirDialog(QDialog):
@@ -727,6 +884,8 @@ class MainWindow(QMainWindow):
         self._detect_dcc()
         self._build_ui()
         self._wire_bus()
+        # 各程序功能自动化配置: 探测命中的路径写入空设置项(只填空不覆盖)
+        self._auto_configure_dcc()
 
     # ------------------------------------------------------------------ #
     def _detect_dcc(self):
@@ -814,7 +973,7 @@ class MainWindow(QMainWindow):
         pform.addRow("3DGS 迭代数:", self.sp_iters)
         fmt_row = QHBoxLayout()
         self.fmt_checks: dict[str, QCheckBox] = {}
-        for fmt in ["fbx", "obj", "glb", "blend", "uasset"]:
+        for fmt in ["fbx", "obj", "glb", "blend", "usd", "uasset"]:
             cb = QCheckBox(fmt)
             cb.setChecked(fmt in self.settings.export_formats)
             self.fmt_checks[fmt] = cb
@@ -825,6 +984,31 @@ class MainWindow(QMainWindow):
         self.cb_repair = QCheckBox("启用 Metashape 洞穴修复 (需 Pro 授权)")
         self.cb_repair.setChecked(self.settings.enable_metashape_repair)
         pform.addRow(self.cb_repair)
+        self.cb_cuda = QCheckBox("CUDA 加速 (COLMAP 特征提取/匹配走 GPU)")
+        self.cb_cuda.setChecked(self.settings.enable_cuda_accel)
+        self.cb_cuda.setToolTip(
+            "勾选: COLMAP 特征提取与匹配使用 GPU (需 NVIDIA 显卡 + CUDA 版 COLMAP,\n"
+            "依赖体检安装的便携版即 CUDA 版)。取消勾选回退 CPU, 仅在 GPU 异常时使用。\n"
+            "3DGS 训练本身始终使用 GPU, 不受此项影响。")
+        pform.addRow(self.cb_cuda)
+        self.cb_rizomuv = QCheckBox("RizomUV 自动展 UV (需安装 RizomUV VS/RS)")
+        self.cb_rizomuv.setChecked(self.settings.enable_rizomuv)
+        self.cb_rizomuv.setToolTip(
+            "安装了 RizomUV 时, 网格重建后自动无头展 UV + 打包,\n"
+            "贴图质量优于 Blender 兜底智能UV; 未安装则自动跳过。")
+        pform.addRow(self.cb_rizomuv)
+        erow = QHBoxLayout()
+        self.ed_export_dir = QLineEdit(self.settings.export_dir or "")
+        self.ed_export_dir.setPlaceholderText(
+            "留空 = 自动 (输入源旁的 usf_work)")
+        self.ed_export_dir.setToolTip(
+            "最终模型的导出位置: 设置后, fbx/obj/glb/blend 等成品直接放入该目录。\n"
+            "留空时自动使用输入源旁边的 usf_work 目录 (成品在其 output 子目录)。")
+        btn_browse = QPushButton("浏览…")
+        btn_browse.clicked.connect(self._browse_export_dir)
+        erow.addWidget(self.ed_export_dir, 1)
+        erow.addWidget(btn_browse)
+        pform.addRow("导出位置:", erow)
         lv.addWidget(box_par)
 
         btn_row = QHBoxLayout()
@@ -972,7 +1156,10 @@ class MainWindow(QMainWindow):
             self, "关于",
             f"<b>{APP_NAME}</b> v{__version__}<br>"
             "视频 / 图像多源输入 → SfM → 3DGS 训练 → 网格重建 → 多 DCC 导出<br>"
-            f"支持 {len(DCC_PATH_FIELDS)} 款 DCC 软件自动探测与调用。")
+            f"支持 {len(DCC_PATH_FIELDS)} 款 DCC 软件自动探测与调用。<br><br>"
+            "Copyright © 2026 USF Project — MIT License<br>"
+            "第三方组件 (COLMAP / Blender / gaussian-splatting 等) 许可见随包 "
+            "THIRD_PARTY_LICENSES.md; 本软件仅供学习与研究使用。")
 
     # ------------------------------------------------------------------ #
     def _wire_bus(self):
@@ -1070,6 +1257,32 @@ class MainWindow(QMainWindow):
             self._refresh_leds_initial()
             self._on_log("INFO", "调用路径设置已保存, DCC 重新探测完成")
 
+    def _auto_configure_dcc(self):
+        """各程序功能自动化配置: 把三级探测命中的 DCC 路径写入 settings
+        中仍为空的字段 (只填空, 绝不覆盖用户显式设置), 并记录日志。"""
+        changed = []
+        for key, name, field in DCC_PATH_FIELDS:
+            if getattr(self.settings, field, None):
+                continue
+            info = self.dcc_infos.get(key)
+            if info and info.available and info.exe:
+                setattr(self.settings, field, info.exe)
+                changed.append(f"{name}")
+        if changed:
+            try:
+                self.settings.save()
+                self._on_log("INFO", "自动配置完成: "
+                             + ", ".join(changed) + " 路径已写入设置")
+            except OSError as exc:
+                self._on_log("WARNING", f"自动配置保存失败: {exc}")
+
+    def _browse_export_dir(self):
+        d = QFileDialog.getExistingDirectory(
+            self, "选择导出位置 (最终模型将放入该目录)",
+            self.ed_export_dir.text().strip() or "")
+        if d:
+            self.ed_export_dir.setText(d)
+
     def _open_manual(self):
         from app.utils.paths import docs_dir
         manual = docs_dir() / "user_manual.html"
@@ -1094,8 +1307,16 @@ class MainWindow(QMainWindow):
         self.settings.frame_fps = self.sp_fps.value()
         self.settings.max_frames = self.sp_frames.value()
         self.settings.gs_iterations = self.sp_iters.value()
-        self.settings.export_formats = [f for f, cb in self.fmt_checks.items() if cb.isChecked()]
+        fmts = [f for f, cb in self.fmt_checks.items() if cb.isChecked()]
+        if not fmts:
+            QMessageBox.warning(self, "提示",
+                                "请至少勾选一种导出格式, 否则不会产出模型文件。")
+            return
+        self.settings.export_formats = fmts
         self.settings.enable_metashape_repair = self.cb_repair.isChecked()
+        self.settings.enable_cuda_accel = self.cb_cuda.isChecked()
+        self.settings.enable_rizomuv = self.cb_rizomuv.isChecked()
+        self.settings.export_dir = self.ed_export_dir.text().strip() or None
         self.settings.save()
 
         # 工作目录跟随首个输入源: 文件 → 同级 usf_work, 目录 → 子级 usf_work

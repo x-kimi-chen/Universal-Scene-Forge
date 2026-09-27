@@ -212,6 +212,38 @@ class Ingester:
         return frames
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _blur_score(path: Path) -> float:
+        """Laplacian 方差作为清晰度得分（越低越模糊）。"""
+        try:
+            import cv2
+        except ImportError:
+            return float("inf")
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return 0.0
+        return float(cv2.Laplacian(img, cv2.CV_64F).var())
+
+    def filter_blurry(self, frames: List[Path],
+                      drop_ratio: float = 0.2) -> List[Path]:
+        """剔除最模糊的帧（视频对焦/运动模糊会拖垮 SfM 与 3DGS 质量）。
+
+        策略: 计算 Laplacian 方差, 丢弃低于中位数 ×(1-drop_ratio) 的帧;
+        最多丢弃 40% (极端全糊时保底)。返回保留帧列表。
+        """
+        if len(frames) < 8:
+            return frames
+        scores = [(f, self._blur_score(f)) for f in frames]
+        vals = sorted(s for _f, s in scores)
+        median = vals[len(vals) // 2]
+        threshold = median * (1.0 - drop_ratio)
+        kept = [f for f, s in scores if s >= threshold]
+        dropped = len(frames) - len(kept)
+        if dropped and len(kept) >= 6:
+            log.info("剔除模糊帧 %d 张 (清晰度阈值 %.0f)", dropped, threshold)
+            return kept
+        return frames
+
     def preprocess(self, frames: List[Path], max_side: int = 1600,
                    workers: int = 8) -> List[Path]:
         """CPU 并行预处理：长边>max_side 的帧降采样（省 SfM/训练显存）。"""

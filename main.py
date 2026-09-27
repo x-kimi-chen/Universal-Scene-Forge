@@ -89,10 +89,20 @@ def _run_cli(sources: list, output: Path) -> int:
     return 0 if result["ok"] else 1
 
 
+def _preload_open3d() -> None:
+    """主线程预载 open3d: 冻结环境下流水线线程内首次导入可能因 DLL 初始化
+    失败(实测), 预载进 sys.modules 后流水线线程直接命中缓存。失败不阻断。"""
+    try:
+        import open3d  # noqa: F401
+    except Exception:  # noqa: BLE001 —— 缺失/异常交由依赖体检与各阶段兜底
+        pass
+
+
 def main() -> int:
     setup_logging()
     from app.utils.paths import register_external_pkgs
     register_external_pkgs()   # 冻结壳 python_pkgs 补装目录（依赖体检一键安装的落地处）
+    _preload_open3d()
     _reconfigure_stdio()
     args = _parse_args()
     if args.check_deps:

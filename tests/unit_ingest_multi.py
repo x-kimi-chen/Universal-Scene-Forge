@@ -299,11 +299,11 @@ try:
     # 12) 进度反馈: 步骤条 / 大进度条 / 失败弹窗
     # ---------------------------------------------------------------- #
     from app.views.main_window import STAGE_ORDER as _SO
-    check("12a", "STAGE_ORDER 覆盖流水线 8 阶段", len(_SO) == 8)
+    check("12a", "STAGE_ORDER 覆盖流水线全部 9 阶段", len(_SO) == 9)
     win.lbl_stage.setText("就绪")                     # 复位
     win.bus.stage.emit(_SO[0])
     check("12b", "阶段信号更新计数与 active 步骤",
-          win.lbl_step.text() == "阶段 1/8"
+          win.lbl_step.text() == "阶段 1/9"
           and win._stage_states[0] == "active"
           and win.lbl_stage.text() == _SO[0])
     win.bus.stage_failed.emit(_SO[0])

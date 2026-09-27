@@ -15,6 +15,7 @@ class Stage(enum.Enum):
     SFM = "COLMAP 位姿求解"
     TRAIN = "3D 高斯泼溅训练"
     MESH = "泼溅网格重建"
+    RIZOMUV = "RizomUV 自动展UV"
     UE5_PREVIEW = "UE5 实时预览推送"
     DCC_POST = "Blender 网格后处理"
     REPAIR = "Metashape 洞穴修复"
