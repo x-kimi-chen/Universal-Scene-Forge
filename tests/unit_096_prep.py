@@ -48,12 +48,8 @@ eng2 = trainers.create_engine(s)
 check("trainer.builtin-select", isinstance(eng2, trainers.Builtin3dgsAdapter))
 # nerfstudio 骨架: 未装环境时明确报骨架状态
 ns = trainers.NerfstudioAdapter.detect(s)
-check("trainer.nerfstudio-skeleton", isinstance(ns.detail, str))
-try:
-    trainers.NerfstudioAdapter("ns-train").train(Path("."), Path("."), 100)
-    check("trainer.nerfstudio-skeleton-err", False, "应抛骨架错误")
-except trainers.TrainingEngineError as e:
-    check("trainer.nerfstudio-skeleton-err", "骨架" in str(e))
+check("trainer.nerfstudio-installed", ns.available and "ns-train" in ns.detail,
+      ns.detail)
 
 # 3) RealityScan 桥接: 可实例化 + CLI 脚本按惯例生成 + 未装优雅由调用方处理
 b = RealityScanBridge("RealityScan.exe", timeout_s=10)

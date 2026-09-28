@@ -32,8 +32,8 @@
 | 任务 | 内容 | 状态 |
 |------|------|------|
 | M2.1 | `app/core/trainers.py`：TrainingEngine 协议 + 注册表 + 内置 3DGS 适配器（委托现有 GaussianEngine） | ✅ 已实现（本提交） |
-| M2.2 | OpenSplat 适配器（单二进制开源 C++，CLI 简单；CPU/CUDA） | ✅ 骨架已实现（检测+命令构建，装機实测入 0.9.6） |
-| M2.3 | nerfstudio splatfacto 适配器（独立 conda/venv 环境，约 10GB） | ✅ 骨架已实现（环境安装器入 0.9.6，**需用户确认磁盘/网络**） |
+| M2.2 | OpenSplat 适配器（单二进制开源 C++，CLI 简单；CPU/CUDA） | ✅ 骨架已实现；⚠ 官方 Releases 无 Windows 预编译版（已实测扫描全部 release），需自编译（本机具备 CUDA+MSVC） |
+| M2.3 | nerfstudio splatfacto 适配器 | ✅ **环境已安装（D:/nerfstudio, torch 2.9+cu128）且 splatfacto 训练实测通过（checkpoint 已产出）**；ns-export→PLY 接入导出链为剩余任务 |
 | M2.4 | 质量对比基准：同一数据集三引擎出图对比（PSNR/LPIPS + 视觉） | 0.9.6 开发 |
 | M2.5 | GUI：训练器下拉选择 + 每引擎参数预设 | 0.9.6 开发 |
 
@@ -88,7 +88,7 @@
 
 | 项 | 依赖/成本 | 风险 | 缓解 |
 |----|-----------|------|------|
-| nerfstudio 环境 | 独立环境 ~10GB，下载慢 | 安装失败/版本冲突 | 骨架已就绪；环境安装做成可选向导；失败回退内置引擎 |
+| nerfstudio 环境 | ✅ 已安装 (D:/nerfstudio, uv venv + 阿里云 cu128 wheel + 清华 PyPI) | torch 2.10 过新导致 gsplat JIT 不兼容（实测，已降级 2.9 解决）；Commandlet 异步导入收尾 | 环境变量配方已固化（MAX_JOBS=1 / NVCC_APPEND_FLAGS / CCCL_IGNORE） |
 | rembg 模型 | u2net.onnx ~170MB 首次下载 | 遮罩不准 | 阈值可调 + GUI 预览确认；仅影响主体质量 |
 | RealityScan | 需 Epic 授权与安装 | 无授权则不可用 | 优雅跳过；Metashape 路径不受影响 |
 | OpenSplat | 需下载对应 CUDA 构建二进制 | 版本迭代快 | 固定已验证版本号 + 校验 |

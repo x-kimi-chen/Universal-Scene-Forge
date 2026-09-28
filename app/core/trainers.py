@@ -8,7 +8,8 @@ gaussian-splatting) 保持零改动, 由 Builtin3dgsAdapter 委托。
 适配器状态:
 - builtin  : ✅ 完整可用 (0.9.5 现状)
 - opensplat: 骨架 (检测 + 命令构建; 需下载对应 CUDA 构建二进制后实机联调)
-- nerfstudio: 骨架 (独立环境 ~10GB, 环境安装向导入 0.9.6; 需用户确认)
+- nerfstudio: ✅ 环境已安装 (D:/nerfstudio, torch 2.9.0+cu128) 且
+  splatfacto 训练实测通过 (checkpoint 已产出)
 """
 from __future__ import annotations
 
@@ -88,12 +89,22 @@ class OpenSplatAdapter:
 
     @staticmethod
     def detect(settings) -> EngineInfo:
-        exe = shutil.which("opensplat") or (
-            Path(settings.tools_root) / "opensplat" / "opensplat.exe")
-        ok = Path(exe).exists() if exe else False
-        return EngineInfo("opensplat", "OpenSplat", ok,
-                          str(exe) if ok else "未找到 opensplat.exe (可从官方"
-                          " Releases 下载放置到 tools/opensplat/)")
+        # 官方 Releases 无 Windows 预编译版 (已实测扫描), 约定检测:
+        # settings.opensplat_exe → D:/OpenSplat/opensplat.exe (用户指定目录) → PATH
+        cands = []
+        exe_setting = getattr(settings, "opensplat_exe", None)
+        if exe_setting:
+            cands.append(Path(exe_setting))
+        cands.append(Path("D:/OpenSplat/opensplat.exe"))
+        w = shutil.which("opensplat")
+        if w:
+            cands.append(Path(w))
+        for cand in cands:
+            if cand.exists():
+                return EngineInfo("opensplat", "OpenSplat", True, str(cand))
+        return EngineInfo("opensplat", "OpenSplat", False,
+                          "未找到 opensplat.exe (官方无 Windows 预编译版; "
+                          "自行编译后放置 D:/OpenSplat/, 详见该目录 README.txt)")
 
     def train(self, dataset_dir: Path, model_dir: Path,
               iterations: int) -> Path:
@@ -126,6 +137,9 @@ class OpenSplatAdapter:
 # --------------------------------------------------------------------- #
 # nerfstudio splatfacto —— 骨架 (独立环境, 需用户确认后安装)
 # --------------------------------------------------------------------- #
+NS_ROOT = Path("D:/nerfstudio")   # 用户指定安装目录
+
+
 class NerfstudioAdapter:
     name = "nerfstudio splatfacto"
 
@@ -135,23 +149,36 @@ class NerfstudioAdapter:
         self.stop_event = stop_event
 
     @staticmethod
+    def _ns_train_exe() -> Path:
+        return NS_ROOT / ".venv" / "Scripts" / "ns-train.exe"
+
+    @staticmethod
     def detect(settings) -> EngineInfo:
-        ns = shutil.which("ns-train")
-        ok = ns is not None
+        exe = NerfstudioAdapter._ns_train_exe()
+        ok = exe.exists()
         return EngineInfo("nerfstudio", "nerfstudio splatfacto", ok,
-                          ns or "未找到 ns-train (nerfstudio 需独立环境, "
-                          "安装向导在 0.9.6 提供; 约 10GB)")
+                          str(exe) if ok else
+                          "未找到 ns-train (安装于 D:/nerfstudio)")
 
     def train(self, dataset_dir: Path, model_dir: Path,
               iterations: int) -> Path:
-        """nerfstudio: 先 ns-process-data 组织数据, 再 ns-train splatfacto。
+        """已验证的 splatfacto 训练配方 (0.9.5 实测通过):
 
-        骨架状态: nerfstudio 数据布局 (transforms.json) 与 COLMAP 不同,
-        需 ns-process-data 或 colmap2nerfstudio 转换 —— 联调入 0.9.6。
+        1. app/core/ns_convert.py 将 COLMAP 数据集转为 transforms.json;
+        2. 经 vcvars64 + 环境变量 (MAX_JOBS=1 / NVCC_APPEND_FLAGS=
+           "-Xcompiler /Zc:preprocessor" / CCCL_IGNORE...) 启动 ns-train
+           splatfacto --pipeline.datamanager.dataparser nerfstudio-data;
+        3. 训练完成产出 checkpoint (nerfstudio_models/step-*.ckpt),
+           由 ns-export gaussian-splat 转出 PLY (0.9.6 接入导出链)。
+
+        注意: --vis viewer 会阻塞进程; 无头运行需控制收尾。
         """
+        from app.core.ns_convert import convert_colmap_to_ns
+        ns_data = convert_colmap_to_ns(Path(dataset_dir))
         raise TrainingEngineError(
-            "nerfstudio 适配器为骨架状态: 需先完成独立环境安装与数据布局"
-            "转换 (transforms.json), 计划入 0.9.6 正式开发。")
+            "nerfstudio 训练需经 vcvars64 包装脚本启动 (gsplat JIT 编译"
+            "要求 MSVC 环境与 MAX_JOBS=1), 完整自动化接入在 0.9.6 完成。"
+            f"已转换数据: {ns_data}")
 
 
 # --------------------------------------------------------------------- #
