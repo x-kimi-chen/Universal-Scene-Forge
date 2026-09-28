@@ -103,6 +103,9 @@ class PipelineSettings:
     enable_cuda_accel: bool = True     # CUDA 加速: COLMAP 特征提取/匹配走 GPU
                                        # （3DGS 训练本身始终用 GPU, 不受此项影响）
     enable_rizomuv: bool = True        # RizomUV 自动展 UV (需安装 RizomUV VS/RS)
+    enable_subject_mask: bool = False  # 0.9.6: 主体遮罩 (rembg), 预览开关默认关
+    trainer: str = "builtin"           # 0.9.6: builtin | opensplat | nerfstudio
+    realityscan_exe: Optional[str] = None  # 0.9.6: RealityScan/RealityCapture CLI
     rizomuv_timeout_s: int = 1800
     modo_timeout_s: int = 3600
     enable_ue5_preview: bool = True

@@ -154,6 +154,22 @@ class PipelineController:
             sources, frames_dir, self.settings.frame_fps,
             self.settings.max_frames)
         frames = ing.filter_blurry(frames)   # 剔除失焦/运动模糊帧
+        if getattr(self.settings, "enable_subject_mask", False):
+            from app.core.masking import SubjectMasker, rembg_available
+            if rembg_available():
+                masker = SubjectMasker(
+                    log_cb=lambda m: self.bus.log_line.emit("INFO", f"mask| {m}"),
+                    stop_event=self.stop_event)
+                masks = masker.generate(
+                    frames, work_dir / "masks",
+                    progress_cb=lambda d, tot, m: self._report(
+                        3 + 4 * d / max(tot, 1), m))
+                if masks:
+                    self.state.masks = [str(m) for m in masks]
+            else:
+                self.bus.log_line.emit(
+                    "WARNING", "主体遮罩已启用但 rembg 未安装, 跳过 "
+                               "(pip install \"rembg[cpu]\")")
         frames = ing.preprocess(
             frames, self.settings.preprocess_max_side,
             self.settings.preprocess_workers)

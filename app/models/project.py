@@ -50,6 +50,7 @@ class ProjectState:
     source: str = ""
     work_dir: str = ""
     frames: List[str] = field(default_factory=list)
+    masks: List[str] = field(default_factory=list)   # 0.9.6: 主体遮罩
     artifacts: Dict[str, List[str]] = field(default_factory=dict)  # stage -> files
     records: List[StageRecord] = field(default_factory=list)
     started_at: float = 0.0
