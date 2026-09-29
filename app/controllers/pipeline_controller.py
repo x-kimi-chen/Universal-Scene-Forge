@@ -502,7 +502,27 @@ class PipelineController:
             formats=self.settings.export_formats,
             lod_ratios=self.settings.lod_ratios,
             bake_ao=self.settings.bake_ao)
-        flat = [f for files in results.values() for f in files]
+        flat = [f for files in results.values() for f in files
+                if Path(f).exists()]   # 只登记真实落盘的产物
+
+        # 高斯泼溅场景交付: 训练产出的 splat PLY 复制到导出目录,
+        # 可直接拖入 SuperSplat / PlayCanvas / Luma 等查看器查看编辑
+        try:
+            splat_src = next((Path(f) for f in
+                              self.state.artifacts.get(
+                                  Stage.TRAIN.value, [])
+                              if Path(f).exists()), None)
+            if splat_src:
+                import shutil as _sh
+                splat_dst = Path(out_dir) / "usf_scene_3dgs.ply"
+                _sh.copy2(splat_src, splat_dst)
+                flat.append(splat_dst)
+                self.bus.log_line.emit(
+                    "INFO", "高斯泼溅场景已导出: usf_scene_3dgs.ply "
+                            "(可用 SuperSplat/UE5 打开)")
+        except Exception as exc:  # noqa: BLE001
+            self.bus.log_line.emit("WARNING", f"splat PLY 导出跳过: {exc}")
+
         self.state.register(Stage.EXPORT.value, flat)
         for f in flat:
             self.bus.artifact.emit(str(f))

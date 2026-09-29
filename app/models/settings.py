@@ -104,6 +104,7 @@ class PipelineSettings:
                                        # （3DGS 训练本身始终用 GPU, 不受此项影响）
     enable_rizomuv: bool = True        # RizomUV 自动展 UV (需安装 RizomUV VS/RS)
     enable_subject_mask: bool = False  # 0.9.6: 主体遮罩 (rembg), 预览开关默认关
+    quality_preset: str = "standard"   # 质量预设: fast | standard | quality
     trainer: str = "builtin"           # 0.9.6: builtin | opensplat | nerfstudio
     realityscan_exe: Optional[str] = None  # 0.9.6: RealityScan/RealityCapture CLI
     opensplat_exe: Optional[str] = None    # 0.9.6: OpenSplat 可执行文件 (可选)

@@ -79,6 +79,29 @@ def save_all(destination):
         unreal.log_warning(f"[UEF] 保存失败: {exc}")
 
 
+def post_process(asset_path):
+    """UE5 后处理: Nanite 启用 + 保存 (逐项容错, 失败不阻断导入交付)。"""
+    try:
+        mesh = unreal.load_asset(asset_path)
+        if mesh is None or not isinstance(mesh, unreal.StaticMesh):
+            unreal.log_warning("[UEF] 后处理跳过: 非静态网格资产")
+            return
+        # 1) Nanite (UE5 内置; 项目/引擎不支持时自动跳过)
+        try:
+            nanite = unreal.NaniteSettings()
+            nanite.enabled = True
+            unreal.EditorStaticMeshLibrary.set_nanite_settings(
+                mesh, nanite, apply_if_possible=True)
+            uef_log(f"Nanite 已启用: {asset_path}")
+        except Exception as exc:
+            unreal.log_warning(f"[UEF] Nanite 跳过: {exc}")
+        # 2) 保存
+        unreal.EditorAssetLibrary.save_asset(asset_path)
+        uef_log(f"后处理完成: {asset_path}")
+    except Exception as exc:
+        unreal.log_warning(f"[UEF] 后处理失败: {exc}")
+
+
 def main():
     payload = load_payload()
     files = payload.get("files", [])
@@ -105,6 +128,7 @@ def main():
         imported.extend(paths)
         for p in paths:
             unreal.log(f"[UEF] ASSET {p}")
+            post_process(p)   # UE5 后处理 (Nanite 等)
         uef_progress(int(100 * (i + 1) / total), name)
 
     uef_log(f"导入完成: {len(imported)} 资产 → {destination}")

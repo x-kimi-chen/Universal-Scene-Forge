@@ -954,6 +954,18 @@ class MainWindow(QMainWindow):
         self.sp_fps.setValue(self.settings.frame_fps)
         self.sp_fps.setToolTip("每秒从视频抽取的帧数, 不设上限。\n"
                                "填源视频帧率即全帧率抽取。")
+        self.preset = QComboBox()
+        self.preset.addItem("⚡ 快速预览", "fast")
+        self.preset.addItem("⚖ 标准", "standard")
+        self.preset.addItem("✨ 高质量", "quality")
+        self.preset.setToolTip(
+            "一键设置抽帧/迭代/网格深度的推荐组合:\n"
+            "⚡ 快速预览: 8fps / 150帧 / 9000迭代 (约 10 分钟出模型)\n"
+            "⚖ 标准: 5fps / 300帧 / 15000迭代\n"
+            "✨ 高质量: 5fps / 300帧 / 30000迭代 + 更深网格\n"
+            "选择后仍可手动微调各参数。")
+        self.preset.currentIndexChanged.connect(self._apply_preset)
+        pform.addRow("质量预设:", self.preset)
         pform.addRow("抽帧帧率 (fps):", self.sp_fps)
         self.sp_frames = QSpinBox()
         self.sp_frames.setRange(0, 999_999_999)
@@ -1276,6 +1288,24 @@ class MainWindow(QMainWindow):
             except OSError as exc:
                 self._on_log("WARNING", f"自动配置保存失败: {exc}")
 
+    _PRESETS = {
+        "fast":     {"fps": 8.0, "frames": 150, "iters": 9_000, "depth": 9},
+        "standard": {"fps": 5.0, "frames": 300, "iters": 15_000, "depth": 9},
+        "quality":  {"fps": 5.0, "frames": 300, "iters": 30_000, "depth": 10},
+    }
+
+    def _apply_preset(self, index: int):
+        key = self.preset.itemData(index)
+        cfg = self._PRESETS.get(key)
+        if not cfg:
+            return
+        self.sp_fps.setValue(cfg["fps"])
+        self.sp_frames.setValue(cfg["frames"])
+        self.sp_iters.setValue(cfg["iters"])
+        self.settings.poisson_depth = cfg["depth"]
+        self._on_log("INFO", f"已应用质量预设 {self.preset.currentText()}"
+                             "（网格深度随导出自动适配, 仍可手动微调）")
+
     def _browse_export_dir(self):
         d = QFileDialog.getExistingDirectory(
             self, "选择导出位置 (最终模型将放入该目录)",
@@ -1316,6 +1346,7 @@ class MainWindow(QMainWindow):
         self.settings.enable_metashape_repair = self.cb_repair.isChecked()
         self.settings.enable_cuda_accel = self.cb_cuda.isChecked()
         self.settings.enable_rizomuv = self.cb_rizomuv.isChecked()
+        self.settings.quality_preset = self.preset.currentData() or "standard"
         self.settings.export_dir = self.ed_export_dir.text().strip() or None
         self.settings.save()
 
