@@ -8,13 +8,13 @@ ManifestDPIAware true
 SetCompressor /SOLID lzma   ; 固体 LZMA 压缩: 单文件安装包体积最优
 
 !define APPNAME     "Universal Scene Forge"
-!define APPVERSION  "0.9.5-preview"
+!define APPVERSION  "0.9.6-preview"
 !define COMPANY     "USF Project"
 !define APPID       "{8F4B2C1D-9A7E-4D3F-B5C6-1E2A3B4C5D6E}"
 !define DISTDIR     "..\dist\UniversalSceneForge"
 
 Name "${APPNAME} ${APPVERSION}"
-OutFile "UniversalSceneForge_0.9.5_Preview_Setup.exe"
+OutFile "UniversalSceneForge_0.9.6_Preview_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APPNAME}"
 InstallDirRegKey HKLM "Software\${APPNAME}" "InstallDir"
 RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注册表
@@ -41,11 +41,11 @@ RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注
 !insertmacro MUI_LANGUAGE "English"
 
 ; ---- 版本信息 ----
-VIProductVersion "0.9.5.0"
+VIProductVersion "0.9.6.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=2052 "FileDescription" "3DGS 场景重建与 DCC 自动化导出工具"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "${COMPANY}"
-VIAddVersionKey /LANG=2052 "FileVersion" "0.9.5-preview"
+VIAddVersionKey /LANG=2052 "FileVersion" "0.9.6-preview"
 
 Section "主程序" SecMain
     SectionIn RO

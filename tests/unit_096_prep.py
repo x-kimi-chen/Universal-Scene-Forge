@@ -26,18 +26,22 @@ from app.dcc.realityscan_bridge import RealityScanBridge  # noqa: E402
 
 s = PipelineSettings.load()
 
-# 1) 遮罩模块: rembg 缺席时优雅返回 None (本机未装 rembg → 走跳过路径)
+# 1) 遮罩模块: rembg 已装 → 真实图片生成遮罩 (白=主体)
+import cv2
 masker = SubjectMasker()
-r = masker.generate([Path("a.jpg"), Path("b.jpg")], Path("build/usf_selftest/masks_t"))
+_timg = ROOT / "build/usf_selftest/mask_test_img.png"
+cv2.imwrite(str(_timg), __import__("numpy").full((120, 160, 3), 200, dtype="uint8"))
+r = masker.generate([_timg], ROOT / "build/usf_selftest/masks_t")
 if rembg_available():
-    check("mask.installed", r is not None and len(r) == 2)
+    check("mask.installed", r is not None and len(r) == 1)
 else:
     check("mask.absent-graceful", r is None)
-check("mask.absent-message", isinstance(r, type(None)) or isinstance(r, list))
+_timg.unlink(missing_ok=True)
 
 # 2) 训练器注册表: 全量探测不抛异常; builtin 始终可回退
 engines = trainers.available_engines(s)
-check("trainer.registry", set(engines) == {"builtin", "opensplat", "nerfstudio"})
+check("trainer.registry", set(engines) == {"builtin", "opensplat",
+                                          "nerfstudio", "postshot"})
 check("trainer.builtin-detect", engines["builtin"].available)
 # 所选引擎不可用时回退内置
 s.trainer = "opensplat"          # 本机无 opensplat → 应回退
@@ -63,9 +67,10 @@ except Exception as e:  # noqa: BLE001 —— 骨架预期: 无软件时命令�
 
 # 4) settings 新字段就位
 check("settings.fields",
-      s.enable_subject_mask is False
-      and s.trainer == "builtin"
-      and hasattr(s, "realityscan_exe"))
+      s.trainer == "builtin"
+      and hasattr(s, "realityscan_exe")
+      and hasattr(s, "opensplat_exe")
+      and hasattr(s, "postshot_cli"))
 
 print(f"\n0.9.6-PREP: {ok} 通过 / {fail} 失败")
 sys.exit(1 if fail else 0)

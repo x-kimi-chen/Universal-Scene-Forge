@@ -184,10 +184,52 @@ class NerfstudioAdapter:
 # --------------------------------------------------------------------- #
 # 注册表
 # --------------------------------------------------------------------- #
+class PostshotAdapter:
+    """Jawset Postshot CLI 适配骨架 (专有软件, 需用户自装并授权)。
+
+    Postshot 提供 postshot-cli (train/render 导出), 安装后检测路径即自动
+    接入; 未安装时优雅跳过。CLI 参数以安装版本帮助为准 —— 实机联调入
+    后续版本 (用户环境就绪后)。
+    """
+
+    COMMON_PATHS = [
+        Path("C:/Program Files/Jawset/Postshot/bin/postshot-cli.exe"),
+        Path("D:/Program Files/Jawset/Postshot/bin/postshot-cli.exe"),
+    ]
+
+    def __init__(self, exe: str, progress_cb=None, stop_event=None):
+        self.exe = exe
+        self.progress_cb = progress_cb
+        self.stop_event = stop_event
+
+    @staticmethod
+    def detect(settings) -> EngineInfo:
+        cands = []
+        exe_setting = getattr(settings, "postshot_cli", None)
+        if exe_setting:
+            cands.append(Path(exe_setting))
+        cands.extend(PostshotAdapter.COMMON_PATHS)
+        w = shutil.which("postshot-cli")
+        if w:
+            cands.append(Path(w))
+        for cand in cands:
+            if Path(cand).exists():
+                return EngineInfo("postshot", "Postshot (Jawset)", True, str(cand))
+        return EngineInfo("postshot", "Postshot (Jawset)", False,
+                          "未找到 postshot-cli (安装 Postshot 后自动接入)")
+
+    def train(self, dataset_dir: Path, model_dir: Path,
+              iterations: int) -> Path:
+        raise TrainingEngineError(
+            "Postshot 适配为骨架状态: 需在装有 Postshot 的机器上按其 "
+            "postshot-cli 文档联调训练命令 (后续版本完成)。")
+
+
 _ENGINES = {
     "builtin": Builtin3dgsAdapter,
     "opensplat": OpenSplatAdapter,
     "nerfstudio": NerfstudioAdapter,
+    "postshot": PostshotAdapter,
 }
 
 

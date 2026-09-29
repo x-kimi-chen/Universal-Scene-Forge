@@ -205,19 +205,34 @@ class PipelineController:
         return dataset
 
     def _train(self, work_dir: Path) -> Path:
-        # 训练解释器: 显式 gs_python → 仓库内 .venv(B-01, 冻结模式下绝不回退
-        # 到 sys.executable —— 那是主程序 EXE, 会吞掉 train.py 的参数)
-        python_exe = deps.training_python(self.settings)
-        engine = GaussianEngine(
-            gs_repo=Path(self.settings.gs_repo),
-            python_exe=str(python_exe) if python_exe else None,
+        # 训练器抽象 (0.9.6): settings.trainer 选择引擎, 不可用回退内置
+        # (内置引擎内部保留 B-01 训练解释器守卫与 CUDA 加速逻辑)
+        from app.core import trainers
+        engine = trainers.create_engine(
+            self.settings,
             progress_cb=lambda cur, total, m: self._report(
                 20 + 35 * cur / max(total, 1), f"{m} {cur}/{total}"),
-            stop_event=self.stop_event,
-            cuda_accel=self.settings.enable_cuda_accel)
+            stop_event=self.stop_event)
         ply = engine.train(work_dir / "dataset", work_dir / "model",
-                            self.settings.gs_iterations)
+                           self.settings.gs_iterations)
         self.state.register(Stage.TRAIN.value, [ply])
+
+        # M1.5 主体高斯过滤 (0.9.6): 有遮罩时投影采样剔除背景高斯,
+        # 网格重建聚焦主体 (修复 Q-01 主体缺失)。
+        if getattr(self.state, "masks", None):
+            try:
+                from app.core.gaussian_filter import filter_gaussians_by_masks
+                filtered = filter_gaussians_by_masks(
+                    Path(ply), Path(ply).with_name("point_cloud_subject.ply"),
+                    work_dir / "dataset", work_dir / "masks")
+                if filtered:
+                    ply = filtered
+                    self.state.register(Stage.TRAIN.value, [ply])
+                    self.bus.log_line.emit(
+                        "INFO", "已应用主体高斯过滤 (训练后投影采样)")
+            except Exception as exc:  # noqa: BLE001 过滤失败回退原点云
+                self.bus.log_line.emit(
+                    "WARNING", f"主体高斯过滤失败, 使用原始点云: {exc}")
         return ply
 
     def _mesh(self, work_dir: Path) -> List[Path]:

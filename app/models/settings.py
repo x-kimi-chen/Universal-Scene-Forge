@@ -107,6 +107,7 @@ class PipelineSettings:
     trainer: str = "builtin"           # 0.9.6: builtin | opensplat | nerfstudio
     realityscan_exe: Optional[str] = None  # 0.9.6: RealityScan/RealityCapture CLI
     opensplat_exe: Optional[str] = None    # 0.9.6: OpenSplat 可执行文件 (可选)
+    postshot_cli: Optional[str] = None     # 0.9.6: Postshot CLI 路径 (可选)
     rizomuv_timeout_s: int = 1800
     modo_timeout_s: int = 3600
     enable_ue5_preview: bool = True

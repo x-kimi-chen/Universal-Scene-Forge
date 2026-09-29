@@ -5,6 +5,37 @@
 
 ---
 
+## 0.9.6-preview — 开发中 (Pre-release)
+
+> 目标: **重建真实感与清晰度**。开发计划见 `docs/DEV_PLAN_0.9.6.md`,
+> 架构与扩展指南见 `docs/DEV_MANUAL.md`。
+
+### 新增 (开发中)
+
+- **主体遮罩管线**（M1）: rembg(U2Net) 自动生成主体遮罩, 用于 SfM/训练/
+  高斯过滤 —— 解决暗色主体在高纹理背景下缺失的核心问题 (Q-01)。
+- **训练后主体高斯投影过滤**（M1.5）: 训练得到的点云逐高斯投影到各视图,
+  多数视图位于主体遮罩内才保留 —— 免 train.py 补丁即可聚焦主体。
+  （已接入流水线: 训练完成自动执行, 过滤失败自动回退原始点云。）
+- **训练器抽象与多引擎**（M2）: 训练器协议 + 注册表, `settings.trainer`
+  一键切换; 引擎不可用自动回退内置。GUI 无需改动。
+- **nerfstudio splatfacto 引擎**: 独立环境安装于 `D:/nerfstudio`
+  (torch 2.9.0+cu128), **训练实测通过**（checkpoint 已产出）;
+  COLMAP→nerfstudio 数据转换器随附 (`app/core/ns_convert.py`)。
+- **RealityScan CLI 桥接**（M3 骨架）: Epic 生态摄影测量接入点
+  （需本机安装与授权后联调）。
+- **Postshot 检测骨架**: 常见安装路径自动探测, 装机即接入。
+- **开发手册** `docs/DEV_MANUAL.md`: 架构/扩展指南/环境配方/测试/发布流程。
+
+### 已知限制 (0.9.6-preview 开发中)
+
+- 主体遮罩默认关闭 (`enable_subject_mask`), 遮罩质量依赖 rembg U2Net 模型;
+- 训练侧遮罩损失需 external 仓库配合, 当前以「训练后投影过滤」替代;
+- OpenSplat 官方无 Windows 预编译版, 需自编译后放置 `D:/OpenSplat`;
+- nerfstudio 首次训练需 JIT 编译 gsplat (配方见开发手册 §2.5)。
+
+---
+
 ## 0.9.5-preview — 2026-09-27
 
 > 预览版（Pre-release）。包含大量修复与导出可靠性重构，建议升级；
