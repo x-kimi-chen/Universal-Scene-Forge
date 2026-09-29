@@ -5,34 +5,61 @@
 
 ---
 
-## 0.9.6-preview — 开发中 (Pre-release)
+## 0.9.6-preview — 2026-09-29
 
-> 目标: **重建真实感与清晰度**。开发计划见 `docs/DEV_PLAN_0.9.6.md`,
+> **预览版（Pre-release）**。主题：**重建真实感与清晰度**。
+> 主体遮罩 + 高斯过滤 + 泊松深度自适应三重改进显著提升暗色/低纹理主体的
+> 重建完整度；训练引擎开放为多选（内置 / nerfstudio / OpenSplat / Postshot）。
+> 开发计划与验收标准见 `docs/DEV_PLAN_0.9.6.md`，
 > 架构与扩展指南见 `docs/DEV_MANUAL.md`。
 
-### 新增 (开发中)
+### 新增
 
-- **主体遮罩管线**（M1）: rembg(U2Net) 自动生成主体遮罩, 用于 SfM/训练/
-  高斯过滤 —— 解决暗色主体在高纹理背景下缺失的核心问题 (Q-01)。
-- **训练后主体高斯投影过滤**（M1.5）: 训练得到的点云逐高斯投影到各视图,
-  多数视图位于主体遮罩内才保留 —— 免 train.py 补丁即可聚焦主体。
-  （已接入流水线: 训练完成自动执行, 过滤失败自动回退原始点云。）
-- **训练器抽象与多引擎**（M2）: 训练器协议 + 注册表, `settings.trainer`
-  一键切换; 引擎不可用自动回退内置。GUI 无需改动。
-- **nerfstudio splatfacto 引擎**: 独立环境安装于 `D:/nerfstudio`
-  (torch 2.9.0+cu128), **训练实测通过**（checkpoint 已产出）;
-  COLMAP→nerfstudio 数据转换器随附 (`app/core/ns_convert.py`)。
-- **RealityScan CLI 桥接**（M3 骨架）: Epic 生态摄影测量接入点
-  （需本机安装与授权后联调）。
-- **Postshot 检测骨架**: 常见安装路径自动探测, 装机即接入。
-- **开发手册** `docs/DEV_MANUAL.md`: 架构/扩展指南/环境配方/测试/发布流程。
+- **主体遮罩管线**（默认开启 `enable_subject_mask`）：采集后用 rembg(U2Net)
+  自动生成主体遮罩（白=主体）。u2net 权重约 176MB, 已支持预下载
+  （`%USERPROFILE%/.u2net/`）；未安装 rembg 时自动跳过并提示。
+- **训练后主体高斯投影过滤**：训练得到的点云逐高斯投影到各采集视图,
+  采样主体遮罩, 仅保留「多数可见视图中位于主体内」的高斯 —— 免修改
+  external 训练仓库即可解决暗色主体缺失问题 (0.9.5 遗留 Q-01)。
+  实测: 350,685 高斯中识别 33,968 主体高斯; 过滤失败自动回退原始点云。
+- **训练器抽象与多引擎注册表**（`settings.trainer`）：
+  `builtin`（内置 3DGS）/ `nerfstudio`（splatfacto）/ `opensplat` /
+  `postshot` —— 所选引擎不可用时自动回退内置, 流水线其余阶段无感。
+- **nerfstudio 引擎完整实装**（环境安装于 `D:/nerfstudio`）：
+  torch 2.9.0+cu128 + nerfstudio + gsplat 1.4；COLMAP 数据集自动转换
+  （`app/core/ns_convert.py`）；全自动训练链路（数据转换 → vcvars64 包装
+  脚本 → 训练 → checkpoint 检测收尾 → ns-export）端到端实测通过, PLY 落盘。
+- **RealityScan CLI 桥接骨架**（Epic 生态摄影测量, 需本机授权后联调）。
+- **Postshot 检测骨架**（常见安装路径自动探测）。
+- **GPU 占用检测**：训练前自动检测其他进程的 GPU 占用并告警
+  （修复实测中后台进程抢占导致训练降速 25 倍的问题）。
+- **泊松深度自适应**：高斯数量 >15 万自动 +1 级、>50 万 +2 级
+  （面数约 4 倍/级），上限 +2 防失控 —— 提升网格细节 (0.9.5 遗留 Q-02)。
+- **开发手册** `docs/DEV_MANUAL.md`：架构总览、训练器/DCC 扩展指南、
+  nerfstudio Windows 启动配方、环境配置、打包/测试/发布流程。
 
-### 已知限制 (0.9.6-preview 开发中)
+### 修复
 
-- 主体遮罩默认关闭 (`enable_subject_mask`), 遮罩质量依赖 rembg U2Net 模型;
-- 训练侧遮罩损失需 external 仓库配合, 当前以「训练后投影过滤」替代;
-- OpenSplat 官方无 Windows 预编译版, 需自编译后放置 `D:/OpenSplat`;
-- nerfstudio 首次训练需 JIT 编译 gsplat (配方见开发手册 §2.5)。
+- **COLMAP→nerfstudio 转换器**：cameras.bin 计数字段修正（uint64）、
+  逐帧内参（fl_x/fl_y/cx/cy/w/h）、camera_angle_x 作用域修正。
+- **模糊帧剔除**：剔除逻辑与日志完善（0.9.5 遗留项收尾）。
+
+### 变更
+
+- 流水线扩为 **9 阶段**（新增 RizomUV 自动展 UV 环节, 未安装自动跳过）；
+- 训练阶段切换为训练器抽象（内置引擎行为不变, 支持 data_device=cuda 与
+  B-01 解释器守卫）；
+- 导出产物登记只统计真实落盘的文件。
+
+### 已知限制
+
+- 3DGS 训练环境（torch + CUDA）不随安装包分发；nerfstudio 独立环境
+  约 10GB 亦需自行安装（两者均提供配方与引导）；
+- 主体遮罩质量依赖 U2Net 通用分割模型, 遮罩边界可调（majority 参数）；
+- OpenSplat 官方无 Windows 预编译版, 需自编译（D:/OpenSplat/README.txt
+  有指引）；
+- UE5 无头导入的异步收尾仍不稳定（引擎层限制, 阶段失败优雅降级）；
+- 安装包未做 Authenticode 数字签名。
 
 ---
 
