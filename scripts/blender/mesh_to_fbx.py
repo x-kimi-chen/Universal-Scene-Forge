@@ -177,6 +177,64 @@ def ensure_material(obj):
 
 
 # --------------------------------------------------------------------- #
+#  纹理烘焙: 顶点色/材质 → UV 贴图 (真实感交付, 0.9.7)
+# --------------------------------------------------------------------- #
+def set_engine(name):
+    bpy.context.scene.render.engine = name
+
+
+def scene_render_engine():
+    return bpy.context.scene.render.engine
+
+
+def bake_texture(obj, mat, tex_path, size=2048):
+    scene = bpy.context.scene
+    """把当前材质外观烘焙到 UV 贴图, 并让 BaseColor 改用该贴图。
+
+    前置: obj 已有 UV (smart_uv)。烘焙后 FBX/GLB 交付带真实贴图,
+    观感显著优于纯顶点色。open3d 顶点色链路下等价于"外观烘焙"。
+    """
+    scene = bpy.context.scene
+    prev_engine = scene_render_engine()
+    try:
+        img = bpy.data.images.new("USF_BakedTex", size, size, alpha=False)
+        img.filepath_raw = str(tex_path)
+        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        mat.node_tree.nodes.active = tex
+        tex.select = True
+
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        # 烘焙仅 CYCLES 支持 (EEVEE/Workbench 无头烘焙不可用)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        set_engine("CYCLES")
+        scene.cycles.samples = 1
+        bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"},
+                            use_clear=True, use_selected_to_active=False)
+        set_engine(prev_engine)
+        img.save()
+
+        # BaseColor 改接贴图 (保留顶点色属性节点便于回退)
+        bsdf = next((n for n in mat.node_tree.nodes
+                     if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf:
+            for link in list(mat.node_tree.links):
+                if link.to_node == bsdf and link.to_socket.name == "Base Color":
+                    mat.node_tree.links.remove(link)
+            mat.node_tree.links.new(tex.outputs["Color"],
+                                    bsdf.inputs["Base Color"])
+        usf_log(f"纹理烘焙完成: {size}x{size} → {tex_path.name}")
+        set_engine(prev_engine)
+        return True
+    except Exception as exc:  # noqa: BLE001 烘焙失败回退顶点色, 不阻断
+        set_engine(prev_engine)
+        usf_log(f"纹理烘焙跳过: {exc}")
+        return False
+
+
+# --------------------------------------------------------------------- #
 #  LOD: 非破坏减面复制
 # --------------------------------------------------------------------- #
 def build_lod(obj, ratio, name):
@@ -332,6 +390,13 @@ def main():
     for obj in objs:
         smart_uv(obj)
         ensure_material(obj)
+    if params.get("bake_texture", True) and objs:
+        usf_progress(48, "纹理烘焙")
+        try:
+            bake_texture(objs[0], objs[0].data.materials[0],
+                         out_dir / f"{base}_texture.png")
+        except Exception as exc:  # noqa: BLE001
+            usf_log(f"纹理烘焙失败(不阻断): {exc}")
 
     if params.get("bake_ao"):
         usf_progress(50, "AO 烘焙")

@@ -62,11 +62,15 @@ OFFICIAL_SOURCES = {
         # urls = CUDA 版(仅 NVIDIA); urls_cpu = 无 CUDA 版(AMD/Intel/核显,
         # SIFT 走 CPU, 速度较慢但功能完整) —— 按厂商自动选择。
         "urls": [
+            # 4.2.1: CASPAR 全局求解器大幅提速 (SfmRunner 已版本自适应)
+            "https://github.com/colmap/colmap/releases/download/4.2.1/"
+            "colmap-x64-windows-cuda.zip",
+            "https://gh-proxy.com/https://github.com/colmap/colmap/releases/"
+            "download/4.2.1/colmap-x64-windows-cuda.zip",
+            # 3.9.1 稳定回退 (旧选项命名 SiftExtraction/SiftMatching)
             "https://github.com/colmap/colmap/releases/download/3.9.1/"
             "COLMAP-3.9.1-windows-cuda.zip",
             "https://gh-proxy.com/https://github.com/colmap/colmap/releases/"
-            "download/3.9.1/COLMAP-3.9.1-windows-cuda.zip",
-            "https://ghfast.top/https://github.com/colmap/colmap/releases/"
             "download/3.9.1/COLMAP-3.9.1-windows-cuda.zip",
         ],
         "urls_cpu": [

@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -38,9 +39,36 @@ class SfmRunner:
             from app.dcc.auto_installer import find_portable_exe
             exe = find_portable_exe("colmap", Path(tools_root))
             self.colmap = str(exe) if exe else None
+        self._major_version_cache: Optional[int] = None
         self.progress_cb = progress_cb
         self.stop_event = stop_event or threading.Event()
         self.use_gpu = use_gpu
+
+    def _major_version(self) -> int:
+        """COLMAP 主版本号 (4.x 重构了 GPU 选项命名, 需适配)。"""
+        if self._major_version_cache is None:
+            major = 3
+            try:
+                out = subprocess.run(
+                    [self.colmap, "-h"], capture_output=True, text=True,
+                    timeout=30, errors="replace",
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                    if sys.platform == "win32" else 0)
+                m = re.search(r"COLMAP\s+(\d+)\.(\d+)", out.stdout)
+                if m:
+                    major = int(m.group(1))
+            except Exception:  # noqa: BLE001
+                pass
+            self._major_version_cache = major
+        return self._major_version_cache
+
+    def _gpu_flags(self) -> dict:
+        """按版本返回特征提取/匹配的 GPU 开关参数。"""
+        if self._major_version() >= 4:
+            return {"fe": "--FeatureExtraction.use_gpu",
+                    "fm": "--FeatureMatching.use_gpu"}
+        return {"fe": "--SiftExtraction.use_gpu",
+                "fm": "--SiftMatching.use_gpu"}
 
     # ------------------------------------------------------------------ #
     def build_dataset(self, frames: List[Path], work_dir: Path) -> Path:
@@ -68,12 +96,12 @@ class SfmRunner:
                 # gaussian-splatting 仅接受 PINHOLE/SIMPLE_PINHOLE,
                 # 否则训练阶段必然报 "Colmap camera model not handled"。
                 "--ImageReader.camera_model", "PINHOLE",
-                "--SiftExtraction.use_gpu", str(int(self.use_gpu)),
+                self._gpu_flags()["fe"], str(int(self.use_gpu)),
             ]),
             ("特征匹配", [
                 "exhaustive_matcher",
                 "--database_path", str(db),
-                "--SiftMatching.use_gpu", str(int(self.use_gpu)),
+                self._gpu_flags()["fm"], str(int(self.use_gpu)),
             ]),
             ("增量式重建", [
                 "mapper",

@@ -63,6 +63,13 @@
 - **开发手册** `docs/DEV_MANUAL.md`：架构总览、训练器/DCC 扩展指南、
   nerfstudio Windows 启动配方、环境配置、打包/测试/发布流程。
 
+### 适配（新增）
+
+- **COLMAP 4.2.1 适配**（CASPAR 全局求解器大幅提速）：SfmRunner 按版本
+  自动适配 GPU 选项命名（3.x: SiftExtraction/SiftMatching → 4.x:
+  FeatureExtraction/FeatureMatching），完整 SfM 实测通过；
+  依赖体检自动安装优先下载 4.2.1（3.9.1 保留为回退源）。
+
 ### 修复
 
 - **COLMAP→nerfstudio 转换器**：cameras.bin 计数字段修正（uint64）、
