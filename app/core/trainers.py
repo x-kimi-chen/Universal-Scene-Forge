@@ -14,6 +14,7 @@ gaussian-splatting) 保持零改动, 由 Builtin3dgsAdapter 委托。
 from __future__ import annotations
 
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol
@@ -143,10 +144,13 @@ NS_ROOT = Path("D:/nerfstudio")   # 用户指定安装目录
 class NerfstudioAdapter:
     name = "nerfstudio splatfacto"
 
-    def __init__(self, ns_exe: str, progress_cb=None, stop_event=None):
+    def __init__(self, ns_exe: str, timeout_s: int = 14_400,
+                 progress_cb=None, stop_event=None, log_cb=None):
         self.ns_exe = ns_exe
+        self.timeout_s = timeout_s
         self.progress_cb = progress_cb
-        self.stop_event = stop_event
+        self.stop_event = stop_event or __import__("threading").Event()
+        self.log_cb = log_cb
 
     @staticmethod
     def _ns_train_exe() -> Path:
@@ -162,23 +166,96 @@ class NerfstudioAdapter:
 
     def train(self, dataset_dir: Path, model_dir: Path,
               iterations: int) -> Path:
-        """已验证的 splatfacto 训练配方 (0.9.5 实测通过):
+        """全自动 splatfacto 训练 (配方已在 0.9.5 实测通过)。
 
-        1. app/core/ns_convert.py 将 COLMAP 数据集转为 transforms.json;
-        2. 经 vcvars64 + 环境变量 (MAX_JOBS=1 / NVCC_APPEND_FLAGS=
-           "-Xcompiler /Zc:preprocessor" / CCCL_IGNORE...) 启动 ns-train
-           splatfacto --pipeline.datamanager.dataparser nerfstudio-data;
-        3. 训练完成产出 checkpoint (nerfstudio_models/step-*.ckpt),
-           由 ns-export gaussian-splat 转出 PLY (0.9.6 接入导出链)。
-
-        注意: --vis viewer 会阻塞进程; 无头运行需控制收尾。
+        流程: COLMAP → transforms.json 转换 → 生成 vcvars 包装脚本
+        (MAX_JOBS=1 / NVCC_APPEND_FLAGS / CCCL_IGNORE) → ns-train 轮询
+        checkpoint → 训练完成自动收尾 → ns-export 转出 PLY。
         """
+        import subprocess
+        import time
+
         from app.core.ns_convert import convert_colmap_to_ns
-        ns_data = convert_colmap_to_ns(Path(dataset_dir))
-        raise TrainingEngineError(
-            "nerfstudio 训练需经 vcvars64 包装脚本启动 (gsplat JIT 编译"
-            "要求 MSVC 环境与 MAX_JOBS=1), 完整自动化接入在 0.9.6 完成。"
-            f"已转换数据: {ns_data}")
+        if not self._ns_train_exe().exists():
+            raise TrainingEngineError(
+                f"nerfstudio 未安装: {self._ns_train_exe()} 不存在")
+        dataset_dir = Path(dataset_dir).resolve()
+        ns_data_dir = convert_colmap_to_ns(dataset_dir)
+        data_name = dataset_dir.name or "usf_data"
+
+        venv_scripts = (NS_ROOT / ".venv" / "Scripts").resolve()
+        out_dir = (NS_ROOT / "usf_runs").resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = f"usf{int(time.time())}"
+        run_dir = out_dir / data_name / "splatfacto" / ts
+        config_yml = run_dir / "config.yml"
+        models_dir = run_dir / "nerfstudio_models"
+        target_step = max(iterations - 1, 1)
+
+        bat = out_dir / f"usf_ns_train_{ts}.bat"
+        bat.write_text("\n".join([
+            "@echo off",
+            'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022'
+            '\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul',
+            f"set PATH={venv_scripts.as_posix()};%PATH%",
+            "set MAX_JOBS=1",
+            'set "CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING=1"',
+            'set "NVCC_APPEND_FLAGS=-Xcompiler /Zc:preprocessor"',
+            f"{self._ns_train_exe().as_posix()} splatfacto "
+            f"--data {ns_data_dir.parent.as_posix()} "
+            f"--max-num-iterations {iterations} "
+            f"--output-dir {out_dir.as_posix()} --timestamp {ts}",
+        ]) + "\n", encoding="utf-8")
+        log.info("nerfstudio 训练启动: %s 迭代 %d", bat, iterations)
+
+        creation = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        proc = subprocess.Popen(["cmd", "/c", str(bat)],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                errors="replace", creationflags=creation)
+        ckpt = models_dir / f"step-{target_step:09d}.ckpt"
+        deadline = time.time() + self.timeout_s
+        try:
+            for line in proc.stdout or []:
+                text = line.rstrip()
+                if self.log_cb:
+                    self.log_cb(text[:300])
+                if ckpt.exists():
+                    time.sleep(5)          # 等待 checkpoint 写盘完成
+                    proc.kill()            # 训练完成, viewer 会阻塞进程
+                    break
+                if self.stop_event.is_set() or time.time() > deadline:
+                    proc.kill()
+                    raise TrainingEngineError("nerfstudio 训练被取消或超时")
+            proc.wait(timeout=60)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+
+        if not ckpt.exists():
+            raise TrainingEngineError(
+                f"nerfstudio 训练未产出 checkpoint ({ckpt}), "
+                "详见上方引擎输出")
+
+        # ns-export: checkpoint → PLY (供网格重建阶段使用)
+        ply_out = Path(model_dir).resolve() / "nerfstudio_splat.ply"
+        ply_out.parent.mkdir(parents=True, exist_ok=True)
+        # ns-export 经包装脚本执行: torch 2.6+ weights_only 默认拒绝
+        # checkpoint 中的 numpy 对象, 包装器恢复默认 (可信来源=自产 checkpoint)
+        wrapper = NS_ROOT / "ns_export_safe.py"
+        log.info("导出 PLY: %s", ply_out)
+        exp = subprocess.run(
+            [str(venv_scripts / "python.exe"), str(wrapper),
+             "gaussian-splat", "--load-config", str(config_yml),
+             "--output-dir", str(Path(model_dir).resolve())],
+            capture_output=True, text=True, errors="replace",
+            creationflags=creation, timeout=self.timeout_s)
+        ply = ply_out if ply_out.exists() else model_dir / "splat.ply"
+        if not Path(ply).exists():
+            raise TrainingEngineError(
+                f"ns-export 未产出 PLY (退出码 {exp.returncode})")
+        log.info("nerfstudio 训练完成: %s", ply)
+        return Path(ply)
 
 
 # --------------------------------------------------------------------- #
@@ -245,7 +322,8 @@ def available_engines(settings) -> dict:
     return out
 
 
-def create_engine(settings, progress_cb=None, stop_event=None):
+def create_engine(settings, progress_cb=None, stop_event=None,
+                  log_cb=None):
     """按 settings.trainer 创建引擎; 所选引擎不可用时回退内置并告警。"""
     key = getattr(settings, "trainer", "builtin")
     cls = _ENGINES.get(key, Builtin3dgsAdapter)
@@ -254,4 +332,15 @@ def create_engine(settings, progress_cb=None, stop_event=None):
         log.warning("训练器 %s 不可用 (%s), 回退内置 gaussian-splatting",
                     key, info.detail)
         cls = Builtin3dgsAdapter
-    return cls(settings, progress_cb=progress_cb, stop_event=stop_event)
+    import inspect
+    sig_params = inspect.signature(cls.__init__).parameters
+    kwargs = {"progress_cb": progress_cb, "stop_event": stop_event}
+    if "log_cb" in sig_params:
+        kwargs["log_cb"] = log_cb
+    if "settings" in sig_params:
+        return cls(settings, **kwargs)
+    if "ns_exe" in sig_params:
+        return cls(str(getattr(settings, "nerfstudio_root",
+                              NS_ROOT / ".venv" / "Scripts" / "ns-train.exe")),
+                   **kwargs)
+    return cls(**kwargs)

@@ -204,15 +204,39 @@ class PipelineController:
         self.state.register(Stage.SFM.value, [dataset])
         return dataset
 
+    @staticmethod
+    def _check_gpu_busy() -> Optional[str]:
+        """S-02: 训练前检测其他进程的 GPU 占用 (防止训练被抢速 25 倍)。"""
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                 "--format=csv,noheader"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            apps = [l.strip() for l in out.stdout.strip().splitlines()
+                    if l.strip()]
+            if apps:
+                return "; ".join(apps)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return None
+
     def _train(self, work_dir: Path) -> Path:
         # 训练器抽象 (0.9.6): settings.trainer 选择引擎, 不可用回退内置
         # (内置引擎内部保留 B-01 训练解释器守卫与 CUDA 加速逻辑)
+        busy = self._check_gpu_busy()
+        if busy:
+            self.bus.log_line.emit(
+                "WARNING", "检测到其他进程正在使用 GPU (" + busy
+                + ") —— 训练速度会显著下降, 建议关闭相关程序")
         from app.core import trainers
         engine = trainers.create_engine(
             self.settings,
             progress_cb=lambda cur, total, m: self._report(
                 20 + 35 * cur / max(total, 1), f"{m} {cur}/{total}"),
-            stop_event=self.stop_event)
+            stop_event=self.stop_event,
+            log_cb=lambda l: self.bus.log_line.emit("INFO", f"trainer| {l}"))
         ply = engine.train(work_dir / "dataset", work_dir / "model",
                            self.settings.gs_iterations)
         self.state.register(Stage.TRAIN.value, [ply])
@@ -239,8 +263,24 @@ class PipelineController:
         ply = self.state.artifacts.get(Stage.TRAIN.value, [None])[0]
         if not ply:
             raise RuntimeError("无点云可重建（TRAIN 阶段未产出高斯模型）")
+        # Q-02 自适应细节: 高斯数量大时自动加深泊松八叉树 (面数约 4x/级),
+        # 上限 +2 级防止显存/内存失控
+        depth = self.settings.poisson_depth
+        try:
+            from plyfile import PlyData
+            n_gauss = len(PlyData.read(str(ply))["vertex"].data)
+            if n_gauss > 500_000:
+                depth = min(depth + 2, 12)
+            elif n_gauss > 150_000:
+                depth = min(depth + 1, 12)
+            if depth != self.settings.poisson_depth:
+                self.bus.log_line.emit(
+                    "INFO", f"泊松深度自适应: {self.settings.poisson_depth}"
+                            f" → {depth} (高斯 {n_gauss:,})")
+        except Exception:  # noqa: BLE001 —— 计数失败按原深度
+            depth = self.settings.poisson_depth
         extractor = SplatMeshExtractor(
-            poisson_depth=self.settings.poisson_depth,
+            poisson_depth=depth,
             opacity_threshold=self.settings.opacity_threshold,
             density_quantile=self.settings.density_quantile)
         objs = extractor.run(Path(ply), work_dir / "mesh",
