@@ -91,6 +91,9 @@ class SplatMeshExtractor:
             mesh.remove_vertices_by_mask(keep)
         log.info("网格: %d 顶点 / %d 面", len(mesh.vertices), len(mesh.triangles))
 
+        # Q-02 网格细化: 小碎片移除 → 退化几何清理 → Taubin 平滑
+        mesh = self._refine(mesh)
+
         mesh = self._transfer_colors(mesh, pcd)
         mesh.compute_vertex_normals()
 
@@ -111,6 +114,43 @@ class SplatMeshExtractor:
             outputs.append(lod_path)
             log.info("LOD%d: %d 面 (目标比例 %.0f%%)", i, len(lod.triangles), ratio * 100)
         return outputs
+
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _refine(mesh):
+        """网格细化: 去小碎片 / 去退化面与顶点 / Taubin 平滑。
+
+        泊松重建常产生远离主体的低密度碎片与高频噪点 —— 逐项尝试,
+        open3d 版本差异用 try/except 隔离, 任一步失败不影响其余。
+        """
+        import open3d as o3d
+        try:   # 移除小连通碎片 (保留与主体相连的最大部分)
+            with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Error):
+                tri_clusters, n_clusters = mesh.cluster_connected_triangles()
+            tri_clusters = np.asarray(tri_clusters)
+            if n_clusters > 1:
+                counts = np.bincount(tri_clusters)
+                keep_id = int(np.argmax(counts))
+                mesh.remove_triangles_by_mask(tri_clusters != keep_id)
+                mesh.remove_unreferenced_vertices()
+                log.info("细化: 移除 %d 个小碎片, 保留 %d 面",
+                         n_clusters - 1, len(mesh.triangles))
+        except Exception as exc:  # noqa: BLE001
+            log.info("细化-碎片移除跳过: %s", exc)
+        try:   # 去退化三角形与未引用顶点
+            mesh.remove_degenerate_triangles()
+            mesh.remove_duplicated_triangles()
+            mesh.remove_duplicated_vertices()
+            mesh.remove_non_manifold_edges()
+        except Exception as exc:  # noqa: BLE001
+            log.info("细化-退化清理跳过: %s", exc)
+        try:   # Taubin 平滑: 去高频噪点且不收缩形体 (比 Laplacian 更保形)
+            before = len(mesh.vertices)
+            mesh = mesh.filter_smooth_taubin(number_of_iterations=10)
+            log.info("细化: Taubin 平滑 %d → %d 顶点", before, len(mesh.vertices))
+        except Exception as exc:  # noqa: BLE001
+            log.info("细化-平滑跳过: %s", exc)
+        return mesh
 
     # ------------------------------------------------------------------ #
     @staticmethod

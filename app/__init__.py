@@ -4,5 +4,5 @@
 完成网格后处理，最终导出 FBX / OBJ / GLTF-GLB / .blend / .uasset。
 """
 
-__version__ = "0.9.6-preview"
+__version__ = "0.9.7-preview"
 APP_NAME = "Universal Scene Forge"

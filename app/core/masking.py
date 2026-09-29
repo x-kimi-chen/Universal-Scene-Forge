@@ -46,6 +46,29 @@ class SubjectMasker:
             self.log_cb(msg)
 
     # ================================================================== #
+    @staticmethod
+    def _tighten(alpha, erode_px: int = 2) -> "object":
+        """遮罩收紧: 腐蚀边界 (去背景渗色) + 保留最大连通域 (去小碎片)。
+
+        U2Net 的软边界常外扩 2~5px, 投影过滤时会把边界处的背景高斯
+        误判为主体 —— 腐蚀后配合多数派投票可显著提升过滤精度。
+        """
+        import cv2
+        import numpy as np
+        try:
+            kernel = np.ones((3, 3), np.uint8)
+            hard = (alpha > 127).astype(np.uint8) * 255
+            hard = cv2.erode(hard, kernel, iterations=erode_px)
+            num, labels, stats, _ = cv2.connectedComponentsWithStats(
+                (hard > 0).astype(np.uint8))
+            if num > 2:   # 0 是背景, 1..n 是连通域: 保留面积最大的
+                areas = stats[1:, cv2.CC_STAT_AREA]
+                keep = 1 + int(np.argmax(areas))
+                hard = np.where(labels == keep, 255, 0).astype(np.uint8)
+            return hard
+        except Exception:
+            return alpha
+
     def generate(self, frames: List[Path], masks_dir: Path,
                  progress_cb: Optional[ProgressCb] = None) -> Optional[List[Path]]:
         """为每帧生成同名遮罩到 masks_dir。返回遮罩路径列表; 不可用返回 None。"""
@@ -71,6 +94,7 @@ class SubjectMasker:
                 continue
             rgba = remove(img, session=session)
             alpha = rgba[:, :, 3]               # 白=主体, 黑=背景
+            alpha = self._tighten(alpha)
             mpath = masks_dir / f"mask_{f.stem}.png"
             cv2.imwrite(str(mpath), alpha)
             out.append(mpath)
