@@ -22,6 +22,8 @@ from typing import Callable, List, Optional, Tuple
 
 from app.utils.paths import script_path
 from app.utils.logger import get_logger
+from app.utils.security import (PathSecurityError, ensure_output_dir,
+                                resolve_executable, scrubbed_env, system_tool)
 
 log = get_logger("BLENDER")
 
@@ -54,23 +56,34 @@ class BlenderBridge:
     def run_script(self, script: Path, params: dict,
                    timeout_s: Optional[int] = None) -> Tuple[bool, List[Path], List[str]]:
         """执行 Blender 内部脚本；返回 (ok, 产物列表, 全部日志行)。"""
+        # H-05: 可执行文件与环境隔离。Blender 只允许绝对路径或 PATH 解析,
+        # 且拒绝解析到 CWD; 子进程健康变量剥离 PYTHONPATH/PYTHONHOME。
+        exe = resolve_executable(self.exe)
+        if not exe:
+            raise BlenderBridgeError(f"Blender 可执行文件不可用: {self.exe}")
+        script = Path(script).expanduser().resolve()
+        if not script.is_file():
+            raise BlenderBridgeError(f"缺少桥接脚本: {script}")
+
         with tempfile.NamedTemporaryFile(
                 "w", suffix=".json", delete=False, encoding="utf-8") as f:
             json.dump(params, f, ensure_ascii=False)
             param_file = f.name
 
         cmd = [
-            self.exe,
+            exe,
             "--background",
             "--factory-startup",          # 隔离用户插件/首选项, 保证可复现
             "--python", str(script),
             "--", param_file,
         ]
-        log.info("Blender 无头启动: %s", script.name)
+        log.info("Blender 命令: %s", subprocess.list2cmdline(cmd))
         creation = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        started = time.monotonic()
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
+            env=scrubbed_env(),
             creationflags=creation)
 
         files: List[Path] = []
@@ -104,13 +117,29 @@ class BlenderBridge:
             except OSError:
                 pass
 
+        elapsed = time.monotonic() - started
+        log.info("Blender 退出码 %d, 耗时 %.1fs, 声明产物 %d 个",
+                 code, elapsed, len(files))
         ok = code == 0 and any(DONE_RE.search(l) for l in lines[-40:])
         if not ok:
             tail = "\n".join(lines[-12:])
             raise BlenderBridgeError(f"Blender 脚本未完成 (退出码 {code}):\n{tail}")
-        log.info("Blender 完成, 产物 %d 个: %s", len(files),
-                 ", ".join(f.name for f in files))
-        return True, files, lines
+        # 产物校验: 协议声明的路径必须真实存在且非零字节
+        verified: List[Path] = []
+        for f in files:
+            try:
+                if f.is_file() and f.stat().st_size > 0:
+                    verified.append(f)
+                else:
+                    log.error("Blender 产物缺失或为 0 字节: %s", f)
+            except OSError as exc:
+                log.error("Blender 产物不可读: %s (%s)", f, exc)
+        if not verified:
+            raise BlenderBridgeError(
+                f"Blender 退出码 0 但无有效产物 (声明 {len(files)} 个)")
+        log.info("Blender 完成, 有效产物 %d 个: %s", len(verified),
+                 ", ".join(f.name for f in verified))
+        return True, verified, lines
 
     # ================================================================== #
     #  高层业务接口
@@ -125,7 +154,10 @@ class BlenderBridge:
         这是「调用 Blender 进行网格转 FBX」的主入口, 对应
         scripts/blender/mesh_to_fbx.py。
         """
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = ensure_output_dir(out_dir)
+        mesh_in = Path(mesh_in).expanduser().resolve()
+        if not mesh_in.is_file():
+            raise BlenderBridgeError(f"输入网格不存在: {mesh_in}")
         params = {
             "input": str(mesh_in),
             "out_dir": str(out_dir),
@@ -165,7 +197,8 @@ class BlenderBridge:
     def _kill_tree(proc: subprocess.Popen) -> None:
         try:
             if sys.platform == "win32":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                subprocess.run([system_tool("taskkill.exe"), "/F", "/T",
+                                "/PID", str(proc.pid)],
                                capture_output=True, timeout=15)
             else:
                 proc.kill()

@@ -136,14 +136,23 @@ try:
         ff_exe = ff_dir / "ffmpeg.exe"
         ff_exe.write_bytes(b"MZ")
 
-        ing = Ingester(ffmpeg_exe="E:/explicit/ffmpeg.exe",
+        _explicit = Path(td) / "explicit" / "ffmpeg.exe"
+        _explicit.parent.mkdir(parents=True)
+        _explicit.write_bytes(b"MZ")
+        ing = Ingester(ffmpeg_exe=str(_explicit),
                        tools_root=str(tools))
-        check("I1", "显式 ffmpeg_exe 优先", ing.ffmpeg == "E:/explicit/ffmpeg.exe")
+        check("I1", "显式 ffmpeg_exe 优先",
+              Path(ing.ffmpeg or "").resolve() == _explicit.resolve(),
+              str(ing.ffmpeg))
 
-        _shutil.which = lambda name: "P:/on/path/ffmpeg.exe"
+        _path_ff = Path(td) / "pathbin" / "ffmpeg.exe"
+        _path_ff.parent.mkdir(parents=True)
+        _path_ff.write_bytes(b"MZ")
+        _shutil.which = lambda name: str(_path_ff)
         ing = Ingester(tools_root=str(tools))
         check("I2", "PATH 命中优先于 tools_root",
-              ing.ffmpeg == "P:/on/path/ffmpeg.exe")
+              Path(ing.ffmpeg or "").resolve() == _path_ff.resolve(),
+              str(ing.ffmpeg))
 
         _shutil.which = lambda name: None
         ing = Ingester(tools_root=str(tools))

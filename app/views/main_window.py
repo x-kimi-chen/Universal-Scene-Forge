@@ -31,13 +31,15 @@ from PySide6.QtWidgets import (
 
 from app import APP_NAME, __version__
 from app.controllers.pipeline_controller import EventBus, PipelineController
-from app.dcc import extension_manager
+from app.dcc import auto_installer, extension_manager
 from app.dcc.auto_installer import AutoInstaller, OFFICIAL_SOURCES
 from app.dcc.registry_probe import DccDetector
 from app.models.project import Stage
 from app.models.settings import PIP_MIRRORS, PIP_MIRROR_LABELS, PipelineSettings
-from app.utils import deps
+from app.utils import deps, licensing
 from app.utils.logger import get_logger
+from app.utils.security import (PathSecurityError, ensure_output_dir,
+                                normalize_input)
 
 log = get_logger("GUI")
 
@@ -344,8 +346,15 @@ class DependencyDialog(QDialog):
             self, "确认安装",
             "即将从官方渠道下载便携版工具: <b>" + ", ".join(keys) + "</b><br>"
             f"安装位置: {self.settings.tools_root}<br><br>"
-            "下载支持多镜像自动回退（Blender 3 源 / FFmpeg 2 源）, "
-            "单个源失败自动切换下一个。是否继续？",
+            "下载支持多镜像自动回退（官方源优先, 第三方转发镜像默认禁用）, "
+            "单个源失败自动切换下一个。<br><br>"
+            "<b>许可证与用户义务</b><br>"
+            + "<br>".join(
+                f"· {auto_installer.source_notice(k).splitlines()[0]}<br>"
+                f"  {auto_installer.source_notice(k).splitlines()[1]}"
+                for k in keys if k in auto_installer.LICENSE_INFO)
+            + "<br><br>下载的 FFmpeg 为 GPLv3 构建, 其分发义务由你自行承担; "
+            "USF 本身不打包/不分发该二进制。是否继续？",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if ans != QMessageBox.Yes:
             return
@@ -983,6 +992,25 @@ class MainWindow(QMainWindow):
         self.sp_iters.setToolTip("3DGS 训练迭代次数, 不设上限。\n"
                                  "7000 快速预览, 30000 常规, 更高用于最终交付。")
         pform.addRow("3DGS 迭代数:", self.sp_iters)
+        # 3.1 许可证确认（不可跳过）: 每次启动 GUI 需重新勾选, 结果写 settings 与日志
+        self.cb_3dgs_license = QCheckBox(
+            "我确认 gaussian-splatting 仅用于非商业用途 (Inria/MPII 许可)")
+        self.cb_3dgs_license.setChecked(False)
+        self.cb_3dgs_license.setToolTip(
+            "gaussian-splatting 采用 Inria/MPII 非商业许可, 仅允许研究与评估用途。\n"
+            "勾选即表示本次使用属于非商业用途, 并同意自行承担合规责任。\n"
+            "商业使用必须事先取得 Inria 商业授权:\n"
+            "https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/license.pdf\n"
+            "未勾选时「开始重建」会被拒绝。")
+        pform.addRow(self.cb_3dgs_license)
+        self.cb_commercial = QCheckBox(
+            "本机/本项目为商业用途（将拒绝执行 3DGS）")
+        self.cb_commercial.setChecked(bool(self.settings.commercial_use))
+        self.cb_commercial.setToolTip(
+            "勾选后 USF 拒绝执行 gaussian-splatting（Inria 非商业许可）。\n"
+            "请先取得 Inria 商业授权, 或改用 OpenSplat/nerfstudio/postshot\n"
+            "等自备许可的引擎。USF 不会绕过或模拟任何许可证校验。")
+        pform.addRow(self.cb_commercial)
         fmt_row = QHBoxLayout()
         self.fmt_checks: dict[str, QCheckBox] = {}
         for fmt in ["fbx", "obj", "glb", "blend", "usd", "uasset"]:
@@ -1310,8 +1338,15 @@ class MainWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(
             self, "选择导出位置 (最终模型将放入该目录)",
             self.ed_export_dir.text().strip() or "")
-        if d:
-            self.ed_export_dir.setText(d)
+        if not d:
+            return
+        # 与 CLI 共用同一套写入边界校验（M-01），GUI 不放宽
+        try:
+            d = str(ensure_output_dir(d))
+        except PathSecurityError as exc:
+            QMessageBox.warning(self, "导出位置不允许", str(exc))
+            return
+        self.ed_export_dir.setText(d)
 
     def _open_manual(self):
         from app.utils.paths import docs_dir
@@ -1328,10 +1363,48 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示",
                                 "请先添加至少一个输入源（视频 / 图片 / 图像目录）")
             return
+        # M-01: 与 CLI 共用同一套输入规范化（符号链接解析 + 存在性）
+        try:
+            sources = [normalize_input(s) for s in sources]
+        except (PathSecurityError, OSError) as exc:
+            QMessageBox.warning(self, "输入源不允许", str(exc))
+            self._on_log("ERROR", f"[SECURITY] 输入源被拒绝: {exc}")
+            return
         missing = [str(s) for s in sources if not s.exists()]
         if missing:
             QMessageBox.warning(
                 self, "提示", "以下输入源不存在:\n" + "\n".join(missing))
+            return
+        # 3.1 合规硬门: 商业用途阻断 + 不可跳过的 Inria 非商业确认。
+        # 勾选状态每次启动重置, 不复用上次 session 的确认结果。
+        if self.cb_commercial.isChecked():
+            self.settings.commercial_use = True
+            try:
+                self.settings.save()
+            except OSError:
+                pass
+            self._on_log(
+                "ERROR", "[LICENSE] 已声明商业用途, 拒绝执行 3DGS (Inria/MPII "
+                         "非商业许可); 商业授权: " + licensing.INRIA_COMMERCIAL)
+            QMessageBox.critical(
+                self, "合规阻断",
+                "已勾选「本机/本项目为商业用途」, USF 拒绝执行 gaussian-splatting。\n\n"
+                "gaussian-splatting 采用 Inria/MPII 非商业许可, 商业使用必须\n"
+                "事先取得 Inria 商业授权:\n" + licensing.INRIA_COMMERCIAL + "\n\n"
+                "可选方案:\n"
+                "  • 取消该勾选, 并确认本次为非商业用途;\n"
+                "  • 改用 OpenSplat / nerfstudio / postshot 等自备许可引擎\n"
+                "    （settings.trainer）。")
+            return
+        if not self.cb_3dgs_license.isChecked():
+            self._on_log("ERROR", "[LICENSE] 未确认 gaussian-splatting 的 "
+                                  "Inria/MPII 非商业许可, 拒绝启动")
+            QMessageBox.warning(
+                self, "需要许可证确认",
+                "请先勾选「我确认 gaussian-splatting 仅用于非商业用途」。\n\n"
+                "该确认不可跳过, 每次启动均需重新勾选。\n"
+                "许可: " + licensing.INRIA_LICENSE + "\n"
+                "商业授权: " + licensing.INRIA_COMMERCIAL)
             return
         # 参数写回 settings
         self.settings.frame_fps = self.sp_fps.value()
@@ -1347,13 +1420,31 @@ class MainWindow(QMainWindow):
         self.settings.enable_cuda_accel = self.cb_cuda.isChecked()
         self.settings.enable_rizomuv = self.cb_rizomuv.isChecked()
         self.settings.quality_preset = self.preset.currentData() or "standard"
-        self.settings.export_dir = self.ed_export_dir.text().strip() or None
+        self.settings.commercial_use = False
+        self.settings.license_ack_3dgs = True
+        raw_export = self.ed_export_dir.text().strip()
+        try:
+            export_dir = ensure_output_dir(raw_export) if raw_export else None
+        except (PathSecurityError, OSError) as exc:
+            QMessageBox.warning(self, "导出位置不允许", str(exc))
+            self._on_log("ERROR", f"[SECURITY] 导出目录被拒绝: {exc}")
+            return
+        self.settings.export_dir = str(export_dir) if export_dir else None
         self.settings.save()
+        self._on_log(
+            "INFO", "[LICENSE] 3DGS 非商业用途已确认 (GUI 勾选, 每次启动重勾); "
+                    "commercial_use=false")
 
         # 工作目录跟随首个输入源: 文件 → 同级 usf_work, 目录 → 子级 usf_work
         first = sources[0]
         work_dir = first.parent / "usf_work" if first.is_file() \
             else first / "usf_work"
+        try:
+            work_dir = ensure_output_dir(work_dir)
+        except PathSecurityError as exc:
+            QMessageBox.warning(self, "工作目录不允许", str(exc))
+            self._on_log("ERROR", f"[SECURITY] 工作目录被拒绝: {exc}")
+            return
         controller = PipelineController(self.settings, self.bus,
                                         dcc_infos=self.dcc_infos)
         self.worker = PipelineThread(controller, sources, work_dir, self)
@@ -1425,6 +1516,9 @@ class MainWindow(QMainWindow):
             self.leds[key].set_state(state)
 
     def _on_log(self, level: str, message: str):
+        # M-01: 与 CLI/文件日志共享同一套脱敏, 避免 GUI 控制台出现用户名路径。
+        from app.utils.logger import redact
+        message = redact(message)
         color = {"ERROR": "#ef4444", "WARNING": "#f59e0b"}.get(level, "#d1d5db")
         self.console.appendHtml(
             f'<span style="color:{color};">[{level}]</span> '

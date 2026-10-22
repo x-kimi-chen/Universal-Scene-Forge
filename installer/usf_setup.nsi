@@ -8,13 +8,13 @@ ManifestDPIAware true
 SetCompressor /SOLID lzma   ; 固体 LZMA 压缩: 单文件安装包体积最优
 
 !define APPNAME     "Universal Scene Forge"
-!define APPVERSION  "0.9.7-preview"
+!define APPVERSION  "0.9.8-preview"
 !define COMPANY     "USF Project"
 !define APPID       "{8F4B2C1D-9A7E-4D3F-B5C6-1E2A3B4C5D6E}"
 !define DISTDIR     "..\dist\UniversalSceneForge"
 
 Name "${APPNAME} ${APPVERSION}"
-OutFile "UniversalSceneForge_0.9.7_Preview_Setup.exe"
+OutFile "UniversalSceneForge_0.9.8_Preview_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APPNAME}"
 InstallDirRegKey HKLM "Software\${APPNAME}" "InstallDir"
 RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注册表
@@ -41,11 +41,12 @@ RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注
 !insertmacro MUI_LANGUAGE "English"
 
 ; ---- 版本信息 ----
-VIProductVersion "0.9.7.0"
+VIProductVersion "0.9.8.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=2052 "FileDescription" "3DGS 场景重建与 DCC 自动化导出工具"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "${COMPANY}"
-VIAddVersionKey /LANG=2052 "FileVersion" "0.9.7-preview"
+VIAddVersionKey /LANG=2052 "FileVersion" "0.9.8-preview"
+VIAddVersionKey /LANG=2052 "ProductVersion" "0.9.8-preview"
 
 Section "主程序" SecMain
     SectionIn RO
@@ -59,12 +60,10 @@ Section "主程序" SecMain
     SetRegView 64
 
     SetOutPath "$INSTDIR"
-    ; 用户数据保护(BUG-001/002): 不覆盖安装目录内已有的 external (可能含
-    ; 用户自建训练 venv) 与遗留 settings.json (旧版用户配置)。
+    ; 用户数据保护(BUG-001/002): 不覆盖安装目录内已有的 settings.json。
+    ; 合规硬约束: 永不安装 external\ —— gaussian-splatting 为 Inria/MPII
+    ; 非商业许可, 本安装包不分发其源码; 需要训练的用户按 README 自行克隆。
     File /r /x external /x settings.json "${DISTDIR}\*.*"
-    ${IfNot} ${FileExists} "$INSTDIR\external\gaussian-splatting\train.py"
-        File /r "${DISTDIR}\external"      ; 全新安装才同步训练仓库源码
-    ${EndIf}
 
     ; 开源合规: 许可证与第三方清单随包落盘（LGPL/GPL 组件声明义务, 见
     ; THIRD_PARTY_LICENSES.md §4）

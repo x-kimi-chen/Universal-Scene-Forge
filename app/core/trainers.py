@@ -62,7 +62,8 @@ class Builtin3dgsAdapter:
         self._engine = GaussianEngine(
             gs_repo=Path(settings.gs_repo), python_exe=python_exe,
             progress_cb=progress_cb, stop_event=stop_event,
-            cuda_accel=getattr(settings, "enable_cuda_accel", True))
+            cuda_accel=getattr(settings, "enable_cuda_accel", True),
+            timeout_s=getattr(settings, "train_timeout_s", 14_400))
 
     @staticmethod
     def detect(settings) -> EngineInfo:
@@ -83,10 +84,12 @@ class Builtin3dgsAdapter:
 class OpenSplatAdapter:
     name = "OpenSplat"
 
-    def __init__(self, exe: str, progress_cb=None, stop_event=None):
+    def __init__(self, exe: str, progress_cb=None, stop_event=None,
+                 timeout_s: int = 14_400):
         self.exe = exe
         self.progress_cb = progress_cb
         self.stop_event = stop_event
+        self.timeout_s = timeout_s
 
     @staticmethod
     def detect(settings) -> EngineInfo:
@@ -116,19 +119,33 @@ class OpenSplatAdapter:
         """
         import subprocess
         import sys
+        import time
         from app.core.gaussian import GaussianTrainError
+        from app.utils.security import resolve_executable, scrubbed_env
+        exe = resolve_executable(self.exe)
+        if not exe:
+            raise TrainingEngineError(f"OpenSplat 可执行文件不可用: {self.exe}")
         model_dir = Path(model_dir).resolve()
         model_dir.mkdir(parents=True, exist_ok=True)
         out_ply = model_dir / "opensplat.ply"
-        cmd = [self.exe, str(Path(dataset_dir).resolve()),
+        cmd = [exe, str(Path(dataset_dir).resolve()),
                "-n", str(iterations), "-o", str(out_ply)]
         log.info("OpenSplat 训练启动: %s", " ".join(cmd))
         creation = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
-                                errors="replace", creationflags=creation)
+                                errors="replace", env=scrubbed_env(),
+                                creationflags=creation)
+        deadline = time.monotonic() + self.timeout_s
         for line in proc.stdout or []:
             log.info("opensplat| %s", line.rstrip()[:300])
+            if time.monotonic() > deadline:
+                proc.kill()
+                raise TrainingEngineError(
+                    f"OpenSplat 训练超时（{self.timeout_s} 秒）")
+            if self.stop_event.is_set():
+                proc.kill()
+                raise TrainingEngineError("用户取消")
         if proc.wait() != 0 or not out_ply.exists():
             raise TrainingEngineError(
                 "OpenSplat 训练失败 (骨架状态: 需实机联调参数与产物路径)")
@@ -193,23 +210,33 @@ class NerfstudioAdapter:
         target_step = max(iterations - 1, 1)
 
         bat = out_dir / f"usf_ns_train_{ts}.bat"
+        # 批处理拼接安全（H-04）: 所有插入 .bat 的路径先做元字符校验,
+        # 再以双引号包裹, 防止路径中的 & | < > ^ % 改变命令语义。
+        from app.utils.security import PathSecurityError, bat_quote
+        try:
+            for p in (venv_scripts, self._ns_train_exe(), ns_data_dir.parent,
+                      out_dir, bat.parent):
+                bat_quote(str(p))
+        except PathSecurityError as exc:
+            raise TrainingEngineError(
+                f"nerfstudio 路径含批处理元字符, 拒绝执行: {exc}") from exc
         bat.write_text("\n".join([
             "@echo off",
             'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022'
             '\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul',
-            f"set PATH={venv_scripts.as_posix()};%PATH%",
+            f'set "PATH={venv_scripts};%PATH%"',
             "set MAX_JOBS=1",
             'set "CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING=1"',
             'set "NVCC_APPEND_FLAGS=-Xcompiler /Zc:preprocessor"',
-            f"{self._ns_train_exe().as_posix()} splatfacto "
-            f"--data {ns_data_dir.parent.as_posix()} "
-            f"--max-num-iterations {iterations} "
-            f"--output-dir {out_dir.as_posix()} --timestamp {ts}",
+            f"{bat_quote(str(self._ns_train_exe()))} splatfacto "
+            f"--data {bat_quote(str(ns_data_dir.parent))} "
+            f"--max-num-iterations {int(iterations)} "
+            f"--output-dir {bat_quote(str(out_dir))} --timestamp {ts}",
         ]) + "\n", encoding="utf-8")
         log.info("nerfstudio 训练启动: %s 迭代 %d", bat, iterations)
 
         creation = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        proc = subprocess.Popen(["cmd", "/c", str(bat)],
+        proc = subprocess.Popen(["cmd", "/c", "call", str(bat)],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
                                 errors="replace", creationflags=creation)
@@ -325,6 +352,7 @@ def available_engines(settings) -> dict:
 def create_engine(settings, progress_cb=None, stop_event=None,
                   log_cb=None):
     """按 settings.trainer 创建引擎; 所选引擎不可用时回退内置并告警。"""
+    from app.utils import licensing
     key = getattr(settings, "trainer", "builtin")
     cls = _ENGINES.get(key, Builtin3dgsAdapter)
     info = cls.detect(settings)
@@ -332,6 +360,10 @@ def create_engine(settings, progress_cb=None, stop_event=None,
         log.warning("训练器 %s 不可用 (%s), 回退内置 gaussian-splatting",
                     key, info.detail)
         cls = Builtin3dgsAdapter
+    if cls is Builtin3dgsAdapter:
+        # 回退也不得绕过 Inria 非商业许可门（3.1）
+        licensing.require_3dgs_license(
+            settings, context=f"训练器 {key} → builtin 回退")
     import inspect
     sig_params = inspect.signature(cls.__init__).parameters
     kwargs = {"progress_cb": progress_cb, "stop_event": stop_event}

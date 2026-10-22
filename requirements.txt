@@ -9,9 +9,10 @@ numpy>=1.24.0
 # VideoCapture/imread/imwrite/resize, 全部由 headless 覆盖
 opencv-python-headless>=4.8.0
 # 注意: plyfile 自 1.0.3 起为 GPL-3.0+（PyPI 分类器与包内 COPYING 一致）。
-# 源码仓库发布不受传染; 但若随安装包二进制分发, 整包须满足 GPLv3 义务
-# （详见 THIRD_PARTY_LICENSES.md §1; 规避方案: 改用 open3d 的 PLY IO）。
-plyfile>=1.0.3
+# USF 自有代码已不再依赖它: PLY 读写改由 app/utils/ply_io.py（MIT, 自研）
+# 实现, 详见 THIRD_PARTY_LICENSES.md §1 与 LICENSE_COMPLIANCE_CHANGES.md §3.3。
+# 仅 external/gaussian-splatting 训练环境仍需 plyfile, 那是其上游依赖,
+# 与 USF 自有代码隔离, 不随 GUI 壳分发。
 requests>=2.31.0
 tqdm>=4.65.0
 

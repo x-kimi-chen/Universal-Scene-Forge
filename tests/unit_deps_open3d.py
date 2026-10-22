@@ -36,7 +36,7 @@ check("1a", "REQUIRED_PY 含真实导入名 open3d 键", "open3d" in deps.REQUIR
 check("1b", "REQUIRED_PY 不含别名 o3d 键(防 D-1 回归)", "o3d" not in deps.REQUIRED_PY)
 EXPECTED_MAPPING = {
     "PySide6": "PySide6", "numpy": "numpy",
-    "cv2": "opencv-python-headless", "plyfile": "plyfile",
+    "cv2": "opencv-python-headless",
     "requests": "requests", "open3d": "open3d",
 }
 check("1c", "REQUIRED_PY 键值映射与设计契约一致(键=导入名, 值=pip 包名)",

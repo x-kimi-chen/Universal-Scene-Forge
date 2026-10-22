@@ -1768,7 +1768,7 @@ izomuv.exe</text>
 
 <table>
   <tr><th>类别</th><th>检查内容</th><th>缺失时的处理</th></tr>
-  <tr><td>Python 库</td><td>PySide6 / numpy / opencv / plyfile / requests / open3d（已内置于 exe）</td><td>「安装缺失 Python 库」按所选镜像源 pip 安装</td></tr>
+  <tr><td>Python 库</td><td>PySide6 / numpy / opencv / requests（已内置于 exe）；open3d 可选补装。<strong>plyfile（GPL-3.0+）不在 USF 依赖中、不随 exe 分发</strong></td><td>「安装缺失 Python 库」按所选镜像源 pip 安装；plyfile 仅可能存在于用户自建的 external 训练环境</td></tr>
   <tr><td>系统工具</td><td>FFmpeg、COLMAP（设置覆盖 → PATH → 便携版三级查找）</td><td>「安装缺失工具」多源回退下载官方便携 zip 解压到 <code>~\.universal_scene_forge\tools\</code>，成功后自动写回调用路径</td></tr>
   <tr><td>GPU 驱动</td><td>nvidia-smi 是否可用</td><td>仅提示；无 CUDA 时 3DGS 训练会以极慢的 CPU 模式运行</td></tr>
   <tr><td>训练环境</td><td>gaussian-splatting 仓库、训练 venv、torch+CUDA（后台探测，数秒后回填）</td><td>「一键创建训练环境」全自动安装（venv → torch → CUDA 子模块 → 验证）；也保留手动命令复制</td></tr>

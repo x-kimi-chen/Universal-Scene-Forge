@@ -20,6 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# 3.1 合规门: 训练前必须确认 Inria 非商业许可。这是"不可跳过"的确认,
+# 测试显式声明非商业用途（生产代码不提供默认放行）。
+os.environ.setdefault("USF_ACCEPT_3DGS_LICENSE", "1")
 
 failures = []
 

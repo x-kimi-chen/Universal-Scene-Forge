@@ -12,7 +12,9 @@ NOT distributed with, this repository's MIT-licensed code:
     See THIRD_PARTY_LICENSES.md before any use or redistribution.
   * COLMAP (BSD-3-Clause) — downloaded at runtime from official releases.
   * FFmpeg (GPLv3, gyan.dev essentials build) — downloaded at runtime.
-  * PySide6 (LGPL-3.0), plyfile (GPL-3.0) and other Python dependencies —
-    installed via pip from PyPI at runtime.
+  * PySide6 (LGPL-3.0) and other Python dependencies — installed via pip
+    from PyPI at runtime. plyfile (GPL-3.0+) is NOT a USF dependency and is
+    not packaged; it may only exist inside the user's separate
+    external/gaussian-splatting training environment.
 
 Full attribution and license details: THIRD_PARTY_LICENSES.md.

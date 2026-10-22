@@ -12,10 +12,13 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from app.utils import licensing
 from app.utils.logger import get_logger
+from app.utils.security import scrubbed_env
 
 log = get_logger("3DGS")
 
@@ -43,12 +46,14 @@ class GaussianEngine:
     def __init__(self, gs_repo: Path, python_exe: Optional[str] = None,
                  progress_cb: Optional[ProgressCb] = None,
                  stop_event: Optional[threading.Event] = None,
-                 cuda_accel: bool = False):
+                 cuda_accel: bool = False,
+                 timeout_s: Optional[int] = None):
         self.repo = Path(gs_repo)
         self.python = self._resolve_python(python_exe)
         self.progress_cb = progress_cb
         self.stop_event = stop_event or threading.Event()
         self.cuda_accel = cuda_accel
+        self.timeout_s = timeout_s
 
     # ------------------------------------------------------------------ #
     def _resolve_python(self, python_exe: Optional[str]) -> str:
@@ -77,6 +82,9 @@ class GaussianEngine:
     # ------------------------------------------------------------------ #
     def train(self, dataset_dir: Path, model_dir: Path,
               iterations: int = 30_000) -> Path:
+        # 合规硬门（LICENSE_COMPLIANCE_CHANGES.md 3.1）:
+        # 商用声明 → LicenseBlocked; 未确认非商业条款 → 拒绝执行。
+        licensing.require_3dgs_license(context="gaussian-splatting 训练")
         train_py = self.repo / "train.py"
         if not train_py.exists():
             raise GaussianTrainError(
@@ -109,9 +117,14 @@ class GaussianEngine:
             if 0 < n <= 250:
                 cmd += ["--data_device", "cuda"]
                 log.info("CUDA 加速: data_device=cuda (帧数 %d)", n)
-        env = os.environ.copy()
-        env.setdefault("CUDA_VISIBLE_DEVICES", "0")  # 多卡机器默认用 0 号
+        # 环境隔离: 剥离 PYTHONPATH/PYTHONHOME/PYTHONSTARTUP, PATH 收缩到
+        # 解释器目录 + System32/Windows, 防止外部同名 DLL/exe 劫持（H-01）。
+        env = scrubbed_env(
+            python_exe=self.python,
+            extra={"CUDA_VISIBLE_DEVICES":
+                   os.environ.get("CUDA_VISIBLE_DEVICES", "0")})
         log.info("3DGS 训练启动: %s 迭代 %d", model_dir.name, iterations)
+        log.info("3DGS 命令: %s", subprocess.list2cmdline(cmd))
 
         proc = subprocess.Popen(
             cmd, cwd=str(self.repo), env=env,
@@ -119,6 +132,8 @@ class GaussianEngine:
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         last_report = 0.0
+        deadline = (time.monotonic() + self.timeout_s
+                    if self.timeout_s else None)
         tail: List[str] = []          # 输出尾部快照: 失败时随异常带出, 便于定位
         try:
             for line in proc.stdout or []:
@@ -131,6 +146,10 @@ class GaussianEngine:
                 if self.stop_event.is_set():
                     proc.kill()
                     raise GaussianTrainError("用户取消")
+                if deadline and time.monotonic() > deadline:
+                    proc.kill()
+                    raise GaussianTrainError(
+                        f"3DGS 训练超时（{self.timeout_s} 秒）, 已终止")
                 match = _ITER_RE.search(text)
                 if match and self.progress_cb:
                     cur, total = int(match.group(1)), int(match.group(2))

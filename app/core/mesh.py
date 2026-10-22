@@ -10,7 +10,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Optional
 
-from plyfile import PlyData
+from app.utils.ply_io import PlyData
 
 from app.utils.logger import get_logger
 
@@ -70,8 +70,8 @@ class SplatMeshExtractor:
             import open3d as o3d
         except ImportError as exc:
             raise MeshError(
-                "open3d 未安装（网格重建必需）。请在主界面「依赖体检」中一键安装, "
-                "或手动: pip install open3d") from exc
+                "open3d 不可用（网格重建必需）。请在主界面「依赖体检」中一键安装, "
+                f"或手动: pip install open3d；根因: {exc}") from exc
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
@@ -105,7 +105,9 @@ class SplatMeshExtractor:
 
         total_tris = len(mesh.triangles)
         for i, ratio in enumerate(lod_ratios[1:], start=1):
-            target = max(1_000, int(total_tris * ratio))
+            # 小网格也必须真实减面: 旧实现 max(1000, ...) 在 <1000 面时会
+            # 把目标面数抬到超过原网格, 导致 LOD1/LOD2 与原级完全相同。
+            target = max(1, min(total_tris - 1, int(total_tris * ratio)))
             lod = mesh.simplify_quadric_decimation(target)
             lod.compute_vertex_normals()
             lod_path = obj_path.with_name(f"{base_name}_lod{i}.obj")
@@ -117,6 +119,71 @@ class SplatMeshExtractor:
 
     # ------------------------------------------------------------------ #
     @staticmethod
+    def _prune_components(mesh, tri_clusters: np.ndarray,
+                          n_clusters: int) -> None:
+        """智能连通块保留策略（碎片化网格）。
+
+        旧策略只保留最大连通块, 在“主体被切成大量小块”的扫描网格上会
+        只剩几十个面；直接跳过又会让远处飞点进入交付。这里改为综合评分:
+
+        1. 最大块无条件保留, 面数前 5 的块也保留（防止近邻判定误删部件）;
+        2. 其余块需同时满足“面数 >= max(4, 0.2%)”且
+           （质心在主包围盒外扩 35% 内 或 自身包围盒对角线 >= 主体 5%）;
+        3. 若该策略会删除超过 70% 的面, 判定为“碎片化主体”并整体跳过,
+           保证不会把主体删成残片。
+
+        这样既能去掉远处小飞点, 又能保留主体周围的真实碎片。
+        """
+        counts = np.bincount(tri_clusters, minlength=n_clusters)
+        total = int(counts.sum())
+        if total == 0:
+            return
+        verts = np.asarray(mesh.vertices)
+        tris = np.asarray(mesh.triangles)
+        if len(tris) == 0:
+            return
+        tri_verts = verts[tris]                       # (T, 3, 3)
+        tri_min = tri_verts.min(axis=1)               # (T, 3)
+        tri_max = tri_verts.max(axis=1)
+        cmin = np.full((n_clusters, 3), np.inf)
+        cmax = np.full((n_clusters, 3), -np.inf)
+        np.minimum.at(cmin, tri_clusters, tri_min)
+        np.maximum.at(cmax, tri_clusters, tri_max)
+
+        main = int(np.argmax(counts))
+        main_diag = float(np.linalg.norm(cmax[main] - cmin[main])) or 1.0
+        diag = np.linalg.norm(cmax - cmin, axis=1)
+        centroid = (cmin + cmax) * 0.5
+        margin = 0.35 * main_diag
+        near_main = (
+            np.all(centroid >= cmin[main] - margin, axis=1)
+            & np.all(centroid <= cmax[main] + margin, axis=1)
+        )
+        min_faces = max(4, int(total * 0.002))
+        keep = (counts >= min_faces) & (near_main | (diag >= 0.05 * main_diag))
+        keep[main] = True
+        top = np.argsort(counts)[-5:]
+        keep[top] = True
+
+        keep_faces = int(counts[keep].sum())
+        removed = int(n_clusters - int(keep.sum()))
+        if removed <= 0:
+            log.info("细化: 无碎片可移除 (%d 个连通块)", n_clusters)
+            return
+        if keep_faces < total * 0.3:
+            log.info(
+                "细化: 智能保留会删除过多面 (%d/%d), 判定为主体碎片化, 跳过移除",
+                total - keep_faces, total)
+            return
+        keep_ids = np.where(keep)[0]
+        mesh.remove_triangles_by_mask(~np.isin(tri_clusters, keep_ids))
+        mesh.remove_unreferenced_vertices()
+        log.info(
+            "细化: 智能保留 %d/%d 连通块, 移除 %d 个碎片, 面 %d→%d",
+            len(keep_ids), n_clusters, removed, total, len(mesh.triangles))
+
+    # ------------------------------------------------------------------ #
+    @staticmethod
     def _refine(mesh):
         """网格细化: 去小碎片 / 去退化面与顶点 / Taubin 平滑。
 
@@ -124,17 +191,17 @@ class SplatMeshExtractor:
         open3d 版本差异用 try/except 隔离, 任一步失败不影响其余。
         """
         import open3d as o3d
-        try:   # 移除小连通碎片 (保留与主体相连的最大部分)
+        try:   # 智能移除连通碎片（保留主体 + 近邻/足够大的碎片）
             with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Error):
-                tri_clusters, n_clusters = mesh.cluster_connected_triangles()
+                # Open3D 0.20 返回 3 元组 (每三角形簇, 每簇面数列表, 每簇面积);
+                # 旧版返回 2 元组。n_clusters 是“簇的个数”, 不是面数列表。
+                cluster_ret = mesh.cluster_connected_triangles()
+                tri_clusters = cluster_ret[0]
+                second = cluster_ret[1]
+                n_clusters = len(second) if hasattr(second, "__len__") else int(second)
             tri_clusters = np.asarray(tri_clusters)
             if n_clusters > 1:
-                counts = np.bincount(tri_clusters)
-                keep_id = int(np.argmax(counts))
-                mesh.remove_triangles_by_mask(tri_clusters != keep_id)
-                mesh.remove_unreferenced_vertices()
-                log.info("细化: 移除 %d 个小碎片, 保留 %d 面",
-                         n_clusters - 1, len(mesh.triangles))
+                SplatMeshExtractor._prune_components(mesh, tri_clusters, n_clusters)
         except Exception as exc:  # noqa: BLE001
             log.info("细化-碎片移除跳过: %s", exc)
         try:   # 去退化三角形与未引用顶点

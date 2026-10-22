@@ -50,6 +50,7 @@
     "obj",
     "glb",
     "blend",
+    "usd",
     "uasset"
   ],
   "bake_ao": false,

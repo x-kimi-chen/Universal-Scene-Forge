@@ -11,14 +11,19 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from app.utils.logger import get_logger
+from app.utils.security import resolve_executable, scrubbed_env
 
 log = get_logger("SFM")
 
 ProgressCb = Callable[[int, int, str], None]
+
+# 单个 COLMAP 步骤墙钟上限（H-01）: 特征提取/匹配/重建都可能因畸形输入卡死
+SFM_STEP_TIMEOUT_S = 14_400
 
 
 class SfmError(RuntimeError):
@@ -34,11 +39,12 @@ class SfmRunner:
         # 三级查找(P1): settings 显式路径 → PATH → tools_root 便携版,
         # 与 deps.check_tools / Ingester(FFmpeg) 完全同口径 —— 否则体检
         # 显示 [OK] 而流水线实际报「COLMAP 未安装」。
-        self.colmap = colmap_exe or shutil.which("colmap")
+        self.colmap = resolve_executable(colmap_exe) or \
+            resolve_executable(shutil.which("colmap"))
         if not self.colmap and tools_root:
             from app.dcc.auto_installer import find_portable_exe
             exe = find_portable_exe("colmap", Path(tools_root))
-            self.colmap = str(exe) if exe else None
+            self.colmap = resolve_executable(exe)
         self._major_version_cache: Optional[int] = None
         self.progress_cb = progress_cb
         self.stop_event = stop_event or threading.Event()
@@ -52,6 +58,7 @@ class SfmRunner:
                 out = subprocess.run(
                     [self.colmap, "-h"], capture_output=True, text=True,
                     timeout=30, errors="replace",
+                    env=scrubbed_env(),           # 剥离 PYTHONPATH, 收缩 PATH
                     creationflags=subprocess.CREATE_NO_WINDOW
                     if sys.platform == "win32" else 0)
                 m = re.search(r"COLMAP\s+(\d+)\.(\d+)", out.stdout)
@@ -135,22 +142,38 @@ class SfmRunner:
 
     # ------------------------------------------------------------------ #
     def _run(self, cmd: List[str]) -> None:
+        # H-01: 完整命令行写入日志（脱敏由 logger.RedactionFilter 负责）,
+        # 环境隔离 + 墙钟超时; 超时 kill 并抛 SfmError, 避免流水线永久挂起。
+        log.info("COLMAP 命令: %s", subprocess.list2cmdline(cmd))
+        started = time.monotonic()
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
+            env=scrubbed_env(),
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         tail: List[str] = []   # 输出尾部: 失败时随异常带出, 否则用户只看到退出码
-        for line in proc.stdout or []:
-            text = line.rstrip()
-            if text:
-                log.info("colmap| %s", text[:300])
-                tail.append(text)
-                if len(tail) > 15:
-                    tail.pop(0)
-            if self.stop_event.is_set():
-                proc.kill()
-                raise SfmError("用户取消")
-        code = proc.wait()
+        timed_out = False
+        try:
+            for line in proc.stdout or []:
+                text = line.rstrip()
+                if text:
+                    log.info("colmap| %s", text[:300])
+                    tail.append(text)
+                    if len(tail) > 15:
+                        tail.pop(0)
+                if self.stop_event.is_set():
+                    proc.kill()
+                    raise SfmError("用户取消")
+                if time.monotonic() - started > SFM_STEP_TIMEOUT_S:
+                    timed_out = True
+                    proc.kill()
+                    break
+        finally:
+            code = proc.wait()
+        elapsed = time.monotonic() - started
+        if timed_out:
+            raise SfmError(f"COLMAP 步骤超时（{SFM_STEP_TIMEOUT_S} 秒）, 已终止")
+        log.info("COLMAP 退出码 %d, 耗时 %.1fs", code, elapsed)
         if code != 0:
             detail = "\n".join(tail[-8:]) if tail else "（无输出）"
             raise SfmError(f"COLMAP 退出码 {code}: {' '.join(cmd[:3])} ...\n"

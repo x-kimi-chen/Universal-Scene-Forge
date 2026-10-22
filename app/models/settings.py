@@ -70,6 +70,7 @@ class PipelineSettings:
     gs_repo: str = str(resource_root() / "external" / "gaussian-splatting")
     gs_python: Optional[str] = None   # 训练环境 python.exe；None=当前解释器
     gs_iterations: int = 30_000
+    train_timeout_s: int = 14_400     # 3DGS 训练墙钟上限（防挂死）
 
     # ---- 网格 ----
     poisson_depth: int = 9
@@ -122,7 +123,7 @@ class PipelineSettings:
 
     # ---- 导出 ----
     export_formats: List[str] = field(
-        default_factory=lambda: ["fbx", "obj", "glb", "blend", "uasset"])
+        default_factory=lambda: ["fbx", "obj", "glb", "blend", "usd", "uasset"])
     export_dir: Optional[str] = None   # 导出位置: None = 自动(输入源旁 usf_work/output)
     bake_ao: bool = False              # Blender 内 Cycles AO 烘焙（可选）
 
@@ -130,6 +131,10 @@ class PipelineSettings:
     pip_mirror: str = "tsinghua"
     tools_root: str = str(Path.home() / ".universal_scene_forge" / "tools")
     allow_silent_install: bool = False  # True 时自动安装不再弹确认框
+
+    # ---- 合规（LICENSE_COMPLIANCE_CHANGES.md 3.1）----
+    commercial_use: bool = False        # 用户声明商业用途 → 阻断 Inria 3DGS
+    license_ack_3dgs: bool = False      # 已确认 gaussian-splatting 非商业许可
 
     def save(self, path: Optional[Path] = None) -> None:
         path = path or settings_file()

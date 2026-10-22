@@ -46,7 +46,7 @@ def make_synth_gaussian_ply(ply_path: Path, n: int = 16_000) -> None:
     x y z | nx ny nz | f_dc_0..2 | opacity | scale_0..2 | rot_0..3
     f_dc 由位置调色反解, opacity 设为高置信 (sigmoid≈0.9)。
     """
-    from plyfile import PlyData, PlyElement
+    from app.utils import ply_io
 
     u = np.random.default_rng(42).random(n) * 2 * np.pi
     v = np.random.default_rng(43).random(n) * 2 * np.pi
@@ -85,7 +85,9 @@ def make_synth_gaussian_ply(ply_path: Path, n: int = 16_000) -> None:
     arr["rot_0"], arr["rot_1"], arr["rot_2"], arr["rot_3"] = rot.T
 
     ply_path.parent.mkdir(parents=True, exist_ok=True)
-    PlyData([PlyElement.describe(arr, "vertex")], text=False).write(str(ply_path))
+    # 3.3: 使用 USF 自研 MIT ply_io, 不再 import GPL 的 plyfile
+    ply_io.PlyData([ply_io.PlyElement.describe(arr, "vertex")],
+                   text=False).write(ply_path)
     print(f"[E2E2] 合成高斯 PLY: {ply_path} ({n} 点, {ply_path.stat().st_size//1024} KB)")
 
 

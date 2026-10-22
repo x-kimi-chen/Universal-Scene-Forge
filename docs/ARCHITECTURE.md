@@ -150,7 +150,7 @@ Metashape 同理（`metashape.exe -r repair_mesh.py`，参数经环境变量 `US
 用户首次运行:
   Setup.exe (NSIS, 管理员权限, 含 VC Redist 检测)
     → 双击 UniversalSceneForge.exe
-        ├─ 依赖体检: PySide6/numpy/cv2/plyfile ⊂ exe; ffmpeg/colmap/cuda → 探测
+        ├─ 依赖体检: PySide6/numpy/cv2 ⊂ exe; plyfile 不打包(仅 external 训练环境); ffmpeg/colmap/cuda → 探测
         ├─ 缺 FFmpeg/COLMAP/Blender → 对话框确认 → auto_installer 官方便携 zip
         ├─ 缺 torch(CUDA) → 提示创建独立训练环境 external/gaussian-splatting/.venv
         └─ 一切就绪 → 输入视频 → 一键重建 → output/ 收产物

@@ -5,6 +5,92 @@
 
 ---
 
+## 0.9.8-preview — 2026-10-22
+
+> **预览版（Pre-release）**。主题：**安全加固 + 开源合规 + Blender 交付质量**。
+> 本版对下载链、子进程、路径边界、日志脱敏做了系统性加固；移除 GPL 依赖
+> `plyfile`，并把 Inria 非商业训练代码彻底隔离在安装包之外；Blender 阶段
+> 补齐 UV 修复、多 UV 合并、GLB 切线与真实 LOD。
+
+### 安全加固
+
+- **统一路径边界**：新增 `app/utils/security.py`，CLI/GUI 共用
+  `normalize_input` / `ensure_output_dir` / `ensure_within`；拒绝盘符根、
+  系统根、用户主目录根，并用写探针兜底权限问题。
+- **子进程环境隔离**：`scrubbed_env` 剥离 `PYTHONPATH`/`PYTHONHOME` 等，
+  `resolve_executable` 拒绝相对路径与 CWD 劫持；Blender/COLMAP/FFmpeg/3DGS
+  等主链工具改为参数数组，仓库内 `shell=True` 为 0 处。
+  Metashape/UE5 桥接的环境隔离仍待后续收紧（见 `SECURITY_AUDIT.md` M-06/M-07）。
+- **下载链加固**：便携包解压增加 zip-slip/符号链接防护、体积上限与
+  超时；下载前展示来源与许可证；FFmpeg 下载需显式确认 GPLv3 义务。
+- **媒体解析上限**：视频/图像读取增加尺寸、帧数、时长上限与解码异常兜底，
+  Laplacian 模糊帧剔除不再可能无限解码。
+- **日志脱敏**：`logs/usf_*.log`、CLI stdout、GUI 日志统一脱敏 API key、
+  `Authorization`、Windows 用户名绝对路径。
+
+### 开源合规（“不可以侵权”硬约束）
+
+- **移除 GPL-3.0+ `plyfile`**：USF 自有代码不再 import；新增 MIT
+  `app/utils/ply_io.py` 替代 PLY 读写。
+- **gaussian-splatting（Inria/MPII）**：商用用途直接 `LicenseBlocked`；
+  CLI/GUI 均需不可跳过的非商业确认并写入日志；仅 `external/` 子进程调用，
+  不 import、不动态链接、**不随安装包分发**。
+- **FFmpeg（GPLv3）**：不打包二进制，用户自备或按需下载；下载前展示
+  GPLv3 义务并要求确认。
+- **RizomUV / Metashape / UE5**：标记为可选、用户自备许可证；检测不到
+  授权即 `StageSkipped` 并记录原因，绝不绕过或模拟校验。
+- **构建断言**：PyInstaller 清单排除 `plyfile`；`build_windows.bat` 与
+  `usf_setup.nsi` 均切断 `external/`，产物出现即构建失败/永不安装。
+- **文档**：新增 `SECURITY_AUDIT.md`、`LICENSE_COMPLIANCE_CHANGES.md`；
+  `THIRD_PARTY_LICENSES.md` 区分“调用”与“分发”。
+
+### Blender / 导出
+
+- **UV 纹理坐标修复**：空/全零/退化 UV 层不再被原样导出；自动重建
+  `UVMap`，`smart_project` 失败时回退 `cube_project`。
+- **多 UV 合并**：多套 UV 归一为单一 canonical `UVMap`，避免下游引擎
+  选错 `TEXCOORD`。
+- **GLB 切线**：显式导出 `POSITION / NORMAL / TEXCOORD_0 / TANGENT`。
+- **真实 LOD**：修复 `<1000` 面网格 LOD1/LOD2 不减面的下限 bug；
+  LOD0 复用原对象，不再产生重复网格。
+- **碎片化网格**：智能连通块保留（主体 + 近邻/足够大的碎片 + 面数前 5），
+  避免“只剩几十个面”或“飞点全保留”。
+- **USD**：支持 `.usd/.usda/.usdc` 输入；按后缀输出 USDA/USDC。
+- **导出副作用**：每次导出前重置选择/活动对象/UV/变换；关闭 `.blend1`
+  自动备份；连续多格式导出不再污染场景状态。
+
+### 打包与分发
+
+- 版本号统一升级到 **0.9.8-preview**（`app/__init__.py`、
+  `installer/version_info.txt`、`usf_setup.nsi`）。
+- PyInstaller 6.22.3 onedir + NSIS 单文件安装包；修复 conda 环境下
+  Shiboken/Qt DLL 收集，补 `uuid/zoneinfo` 等 open3d 启动依赖。
+- 许可证 `LICENSE`、`THIRD_PARTY_LICENSES.md`、`NOTICE` 随包分发。
+- 绿色版可直接运行；安装包 `UniversalSceneForge_0.9.8_Preview_Setup.exe`。
+- 新增 `installer/sign_windows.ps1`：支持 PFX / 证书指纹、SHA-256
+  Authenticode 与 RFC3161 时间戳，并在签名后校验状态。
+
+### 测试（本机实测）
+
+- 14 个单元/回归测试全部 exit 0；安全自测 17/17；PLY 读写测试 OK。
+- 源环境 E2E：`exit 0`，18 个产物，FBX/OBJ/GLB/USDA/BLEND 13/13 再导入 OK。
+- EXE E2E：`exit 0`，18 个产物，13/13 再导入 OK；3 个 LOD 的 GLB 均含
+  `TEXCOORD_0` 与 `TANGENT`。
+- 全格式轮：FBX/OBJ/GLB/BLEND/USDA/USDC 16/16 校验 OK。
+
+### 已知限制
+
+- **UASSET** 仍需 UE5 编辑器 + 自备授权，纯 Blender 路径不适用。
+- **3DGS 训练** 未在本机真实执行（external venv 解释器损坏），E2E 使用
+  `--model` 注入点云；许可门由自测覆盖。
+- **下载哈希**：Blender/FFmpeg/COLMAP 三个源尚未配置固定 SHA-256，
+  当前仅告警不阻断（`SECURITY_AUDIT.md` S-02，后续版本收紧）。
+- **open3d** 不随 EXE 打包，需依赖体检补装。
+- **UV 合并** 是 canonical 化，不做多套布局 atlas 打包。
+- 安装包未做 Authenticode 数字签名。
+
+---
+
 ## 0.9.7-preview — 2026-09-30
 
 > **预览版（Pre-release）**。主题：**网格质量细化 + 适配完善**。

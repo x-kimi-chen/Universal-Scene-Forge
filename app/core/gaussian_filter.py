@@ -5,7 +5,8 @@
 仅在「多数可见视图中位于主体内」的高斯保留 —— 从而剔除背景垫子等
 非主体高斯, 让网格重建聚焦主体（修复 Q-01 主体缺失）。
 
-依赖: ns_convert 的 COLMAP 二进制解析 + plyfile(训练环境已含)。
+依赖: ns_convert 的 COLMAP 二进制解析 + USF 自研 ply_io（MIT, 不依赖
+GPL 的 plyfile）。
 """
 from __future__ import annotations
 
@@ -34,11 +35,7 @@ def filter_gaussians_by_masks(ply_in: Path, ply_out: Path,
     Returns:
         过滤后的 ply 路径; 无法解析/无遮罩时返回 None (调用方回退原网格)。
     """
-    try:
-        from plyfile import PlyData
-    except ImportError:
-        log.warning("plyfile 未安装, 无法过滤")
-        return None
+    from app.utils.ply_io import PlyData, PlyElement, PlyIOError
 
     from app.core.ns_convert import _read_cameras_bin, _read_images_bin
 
@@ -65,7 +62,11 @@ def filter_gaussians_by_masks(ply_in: Path, ply_out: Path,
         log.warning("无可用遮罩, 跳过高斯过滤")
         return None
 
-    ply = PlyData.read(str(ply_in))
+    try:
+        ply = PlyData.read(str(ply_in))
+    except PlyIOError as exc:
+        log.warning("点云读取失败, 跳过高斯过滤: %s", exc)
+        return None
     vertex = ply["vertex"]
     xyz = np.stack([vertex["x"], vertex["y"], vertex["z"]], axis=1)
     n = len(xyz)
@@ -124,9 +125,7 @@ def filter_gaussians_by_masks(ply_in: Path, ply_out: Path,
         log.warning("过滤后高斯过少 (%d), 放弃过滤以保底产出", int(keep.sum()))
         return None
 
-    # plyfile 的元素下标会把整数数组当属性名 —— 用 (name, properties, count)
-    # 重构子集元素 (numpy 结构化数组切片)
-    from plyfile import PlyElement
+    # 用 (name, properties, count) 重构子集元素 (numpy 结构化数组切片)
     kept_data = vertex.data[keep]
     el = PlyElement(vertex.name, vertex.properties, len(kept_data),
                     comments=vertex.comments)

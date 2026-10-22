@@ -148,7 +148,15 @@ try:
     from app.views.main_window import MainWindow  # noqa: E402
 
     win = MainWindow()
-    menus = [a.menu() for a in win.menuBar().actions() if a.menu()]
+    # 同时持有 menuBar()/actions()/QMenu 的 Python 引用: PySide6 下临时
+    # 包装器被 GC 回收后再取 title 会报 "QMenu already deleted"(测试脆弱点)
+    _menubar = win.menuBar()
+    _actions = _menubar.actions()
+    menus = []
+    for _act in _actions:
+        _menu = _act.menu()
+        if _menu is not None:
+            menus.append(_menu)
     menu_titles = [m.title() for m in menus]
     check("9a", "菜单栏含 文件/设置/帮助 三个菜单",
           menu_titles == ["文件(&F)", "设置(&S)", "帮助(&H)"],

@@ -36,12 +36,16 @@ class ExportDispatcher:
                    formats: List[str], base_name: str = "usf_scene",
                    lod_ratios: Optional[List[float]] = None,
                    bake_ao: bool = False) -> Dict[str, List[Path]]:
-        out_dir.mkdir(parents=True, exist_ok=True)
+        # M-02: 输出目录边界校验（拒绝盘符根/系统目录, 探测可写性）
+        from app.utils.security import ensure_output_dir
+        out_dir = ensure_output_dir(out_dir)
         lod_ratios = lod_ratios or [1.0, 0.5, 0.25]
         results: Dict[str, List[Path]] = {}
 
         want = {f.lower() for f in formats}
-        blender_formats = want & {"fbx", "glb", "gltf", "blend", "usd"}
+        # OBJ 也交给 Blender（4.0+ bpy.ops.wm.obj_export）, 仅在 Blender 缺席/
+        # 失败时降级 Open3D 直写。
+        blender_formats = want & {"fbx", "glb", "gltf", "blend", "usd", "obj"}
         direct_formats = want - blender_formats - {"uasset"}
 
         if blender_formats and self.blender:
@@ -51,19 +55,27 @@ class ExportDispatcher:
                     formats=sorted(blender_formats),
                     lod_ratios=lod_ratios, bake_ao=bake_ao)
                 for fmt in blender_formats:
-                    results[fmt] = [f for f in files if f.suffix.lower().lstrip(".") == fmt]
+                    # USD 导出器按场景内容可能产出 .usda/.usdc/.usd,
+                    # 三者同属 usd 格式; 只按 fmt 字面匹配会误报"未产出"。
+                    exts = {"usd": {"usd", "usda", "usdc"}}.get(
+                        fmt, {fmt})
+                    results[fmt] = [
+                        f for f in files
+                        if f.suffix.lower().lstrip(".") in exts]
             except Exception as exc:  # noqa: BLE001 容错: Blender 缺席/失败降级
                 log.error("Blender 导出失败, 降级: %s", exc)
 
-        for fmt in direct_formats:
+        # OBJ 降级: Blender 未产出时用 Open3D 直写（可用性优先, 风险最低）
+        if "obj" in want and not results.get("obj"):
             try:
-                if fmt == "obj":
-                    results[fmt] = self._export_obj_lods(
-                        mesh_obj, out_dir, base_name, lod_ratios)
-                else:
-                    log.warning("暂不支持直写格式: %s", fmt)
+                results["obj"] = self._export_obj_lods(
+                    mesh_obj, out_dir, base_name, lod_ratios)
+                log.warning("OBJ 由 Open3D 直写降级导出")
             except Exception as exc:  # noqa: BLE001
-                log.error("导出 %s 失败: %s", fmt, exc)
+                log.error("导出 obj 失败: %s", exc)
+
+        for fmt in direct_formats:
+            log.warning("暂不支持直写格式: %s", fmt)
 
         # FBX 降级链: Blender 缺席/失败 → 3ds Max → Maya → Houdini → C4D
         if "fbx" in want and not results.get("fbx"):
@@ -100,6 +112,22 @@ class ExportDispatcher:
         elif "uasset" in want:
             log.warning("uasset 需要 UE5: 在「调用路径设置」中配置引擎与 .uproject "
                         "工程后重试, 其余格式不受影响")
+
+        # 产物校验（L-02）: 过滤不存在/零字节文件, 避免"日志成功但产物为空"
+        for fmt, files in list(results.items()):
+            good: List[Path] = []
+            for f in files:
+                try:
+                    fp = Path(f)
+                    if fp.is_file() and fp.stat().st_size > 0:
+                        good.append(fp)
+                    else:
+                        log.error("产物缺失或为 0 字节: %s", fp)
+                except OSError as exc:
+                    log.error("产物不可读: %s (%s)", f, exc)
+            results[fmt] = good
+            if want and fmt in want and not good:
+                log.warning("格式 %s 未产出有效文件", fmt)
         return results
 
     # ------------------------------------------------------------------ #
@@ -139,8 +167,9 @@ class ExportDispatcher:
                 mesh = o3d.io.read_triangle_mesh(str(mesh_obj))
                 total = len(mesh.triangles)
                 for i, ratio in enumerate(lod_ratios[1:], start=1):
-                    lod = mesh.simplify_quadric_decimation(
-                        max(1_000, int(total * ratio)))
+                    # 小网格不能用 1000 面下限, 否则 LOD 不会真正减面。
+                    target = max(1, min(total - 1, int(total * ratio)))
+                    lod = mesh.simplify_quadric_decimation(target)
                     lod.compute_vertex_normals()
                     p = out_dir / f"{base_name}_lod{i}.obj"
                     o3d.io.write_triangle_mesh(str(p), lod, write_vertex_colors=True)

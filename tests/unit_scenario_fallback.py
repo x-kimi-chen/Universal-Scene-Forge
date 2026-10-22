@@ -37,7 +37,11 @@ class _BrokenExtractor:
 pc.SplatMeshExtractor = _BrokenExtractor
 
 win = MainWindow()
+# 3.1 合规门: GUI 启动前必须勾选 Inria 非商业用途确认(与真实用户操作一致)
+win.cb_3dgs_license.setChecked(True)
 win.cb_repair.setChecked(True)          # 用户勾选了 Metashape 修复
+# 本测试预期存在失败阶段; 弹窗会阻塞 offscreen 事件循环, 与生产逻辑无关
+win._alert_failure = lambda _title, _detail: None
 win.ed_export_dir.setText(str(ROOT / "build/usf_selftest/scenario_out"))
 win._add_source(str(ROOT / "build/usf_selftest/blender_seq"))
 win._start()

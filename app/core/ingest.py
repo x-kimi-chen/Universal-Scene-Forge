@@ -5,17 +5,27 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from app.utils.logger import get_logger
+from app.utils.security import resolve_executable, scrubbed_env
 
 log = get_logger("INGEST")
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".wmv", ".m4v",
               ".webm", ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".mts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+# 媒体解析边界（SECURITY_AUDIT.md H-03）: 防畸形媒体造成内存耗尽/长时间阻塞
+MAX_IMAGE_BYTES = 64 * 1024 ** 2       # 单张图片 64 MiB
+MAX_VIDEO_BYTES = 8 * 1024 ** 3        # 单个视频 8 GiB
+MAX_IMAGE_SIDE = 16_384                # 单边最大像素
+MAX_DECODE_FRAMES = 200_000           # cv2 逐帧解码最大迭代次数
+DECODE_DEADLINE_S = 600               # 单视频解码墙钟上限
+FFMPEG_TIMEOUT_S = 600
 
 ProgressCb = Callable[[int, int, str], None]   # (done, total, msg)
 
@@ -29,13 +39,14 @@ class Ingester:
                  progress_cb: Optional[ProgressCb] = None,
                  stop_event: Optional[threading.Event] = None,
                  tools_root: Optional[str] = None):
-        self.ffmpeg = ffmpeg_exe or shutil.which("ffmpeg")
+        self.ffmpeg = resolve_executable(ffmpeg_exe) if ffmpeg_exe else \
+            resolve_executable(shutil.which("ffmpeg"))
         if not self.ffmpeg and tools_root:
             # 与 deps.check_tools 同款三级兜底: settings → PATH → tools_root
             # 便携版（settings 保存失败/丢失时仍能找到已装工具）
             from app.dcc.auto_installer import find_portable_exe
             exe = find_portable_exe("ffmpeg", Path(tools_root))
-            self.ffmpeg = str(exe) if exe else None
+            self.ffmpeg = resolve_executable(exe)
         self.progress_cb = progress_cb
         self.stop_event = stop_event or threading.Event()
 
@@ -93,6 +104,11 @@ class Ingester:
                 uniq.append(f)
         if not uniq:
             raise IngestError("所有输入源均未产出图像帧")
+        if max_frames > 0 and len(uniq) > max_frames:
+            # 图像序列同样受 max_frames 约束（防止超大目录造成内存/磁盘耗尽）
+            log.warning("输入帧 %d 超过上限 %d, 均匀截取", len(uniq), max_frames)
+            step = len(uniq) / max_frames
+            uniq = [uniq[int(i * step)] for i in range(max_frames)]
         log.info("多源输入完成: %d 个源 → 合并 %d 帧", len(sources), len(uniq))
         return uniq
 
@@ -149,6 +165,7 @@ class Ingester:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
+            env=scrubbed_env(),           # 剥离 PYTHONPATH/HOME, 收缩 PATH
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         try:
             for line in proc.stdout or []:
@@ -162,9 +179,9 @@ class Ingester:
                         continue
                     self._report(done, max_frames, "抽帧中")
             try:
-                code = proc.wait(timeout=600)
+                code = proc.wait(timeout=FFMPEG_TIMEOUT_S)
             except subprocess.TimeoutExpired:
-                raise IngestError("FFmpeg 超时未退出 (10 分钟)")
+                raise IngestError(f"FFmpeg 超时未退出 ({FFMPEG_TIMEOUT_S} 秒)")
             err = (proc.stderr.read() if proc.stderr else "")
             if code != 0:
                 raise IngestError(f"FFmpeg 退出码 {code}: {err.strip()[:400]}")
@@ -180,6 +197,12 @@ class Ingester:
                      max_frames: int) -> List[Path]:
         """OpenCV 逐帧解码保底（无 ffmpeg / 精简 ffmpeg 缺 image2 muxer 时）。"""
         import cv2
+        try:
+            if video.stat().st_size > MAX_VIDEO_BYTES:
+                raise IngestError(
+                    f"视频超过大小上限 {MAX_VIDEO_BYTES // 1024 ** 3} GiB: {video}")
+        except OSError as exc:
+            raise IngestError(f"无法读取视频: {video} ({exc})") from exc
         cap = cv2.VideoCapture(str(video))
         if not cap.isOpened():
             raise IngestError(f"OpenCV 无法解码视频: {video}")
@@ -190,18 +213,33 @@ class Ingester:
                  max_frames if max_frames > 0 else "不限")
         frames: List[Path] = []
         idx = 0
+        deadline = time.monotonic() + DECODE_DEADLINE_S
         try:
             while True:
                 if self.stop_event.is_set():
                     raise IngestError("用户取消")
-                ok, frame = cap.read()
+                if idx > MAX_DECODE_FRAMES or time.monotonic() > deadline:
+                    log.warning("cv2 解码达到上限 (%d 帧 / %d 秒), 停止",
+                                MAX_DECODE_FRAMES, DECODE_DEADLINE_S)
+                    break
+                try:
+                    ok, frame = cap.read()
+                except Exception as exc:  # noqa: BLE001 解码器异常 → 停止
+                    log.warning("cv2 解码异常, 停止: %s", exc)
+                    break
                 if not ok:
                     break
+                h, w = frame.shape[:2]
+                if max(h, w) > MAX_IMAGE_SIDE:
+                    raise IngestError(
+                        f"视频帧尺寸 {w}x{h} 超过上限 {MAX_IMAGE_SIDE}px")
                 if idx % step == 0:
                     dst = out_dir / f"frame_{len(frames):05d}.jpg"
-                    cv2.imwrite(str(dst), frame,
-                                [cv2.IMWRITE_JPEG_QUALITY, 92])
-                    frames.append(dst)
+                    if not cv2.imwrite(str(dst), frame,
+                                       [cv2.IMWRITE_JPEG_QUALITY, 92]):
+                        log.warning("帧写入失败: %s", dst)
+                    else:
+                        frames.append(dst)
                     self._report(len(frames), max_frames, "抽帧中(cv2)")
                     if max_frames > 0 and len(frames) >= max_frames:
                         break
@@ -214,15 +252,34 @@ class Ingester:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _blur_score(path: Path) -> float:
-        """Laplacian 方差作为清晰度得分（越低越模糊）。"""
+        """Laplacian 方差作为清晰度得分（越低越模糊）。
+
+        解码按 1/4 尺寸进行, 并在解码前限制文件大小/尺寸, 防止畸形图片
+        造成内存耗尽（SECURITY_AUDIT.md H-03）。
+        """
         try:
             import cv2
         except ImportError:
             return float("inf")
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        try:
+            if path.stat().st_size > MAX_IMAGE_BYTES:
+                log.warning("图片超过大小上限, 跳过模糊评分: %s", path)
+                return 0.0
+            img = cv2.imread(str(path), cv2.IMREAD_REDUCED_GRAYSCALE_4)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("图片解析失败, 跳过模糊评分: %s (%s)", path, exc)
+            return 0.0
         if img is None:
             return 0.0
-        return float(cv2.Laplacian(img, cv2.CV_64F).var())
+        h, w = img.shape[:2]
+        if max(h, w) * 4 > MAX_IMAGE_SIDE:
+            log.warning("图片尺寸超过上限, 跳过模糊评分: %s", path)
+            return 0.0
+        try:
+            return float(cv2.Laplacian(img, cv2.CV_64F).var())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Laplacian 计算失败: %s (%s)", path, exc)
+            return 0.0
 
     def filter_blurry(self, frames: List[Path],
                       drop_ratio: float = 0.2) -> List[Path]:
@@ -252,15 +309,28 @@ class Ingester:
                 import cv2  # 延迟导入，缺库时仅跳过预处理
             except ImportError:
                 return path
-            img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            try:
+                if path.stat().st_size > MAX_IMAGE_BYTES:
+                    log.warning("图片超过大小上限, 跳过预处理: %s", path)
+                    return path
+                # 超大图用 1/2 解码, 控制峰值内存（最终长边 ≤ max_side）
+                img = cv2.imread(str(path), cv2.IMREAD_REDUCED_COLOR_2)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("图片解码失败, 跳过预处理: %s (%s)", path, exc)
+                return path
             if img is None:
+                log.warning("图片解码失败, 跳过预处理: %s", path)
                 return path
             h, w = img.shape[:2]
+            if max(h, w) > MAX_IMAGE_SIDE:
+                log.warning("图片尺寸超过上限, 跳过预处理: %s", path)
+                return path
             scale = max_side / max(h, w)
             if scale < 1.0:
                 img = cv2.resize(img, (int(w * scale), int(h * scale)),
-                                interpolation=cv2.INTER_AREA)
-                cv2.imwrite(str(path), img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+                                 interpolation=cv2.INTER_AREA)
+                if not cv2.imwrite(str(path), img, [cv2.IMWRITE_JPEG_QUALITY, 92]):
+                    log.warning("预处理写回失败: %s", path)
             return path
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -284,15 +354,21 @@ class Ingester:
         except ImportError:
             return thumbs
         for i, f in enumerate(picks):
-            img = cv2.imread(str(f))
+            try:
+                img = cv2.imread(str(f), cv2.IMREAD_REDUCED_COLOR_2)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("缩略图读取失败: %s (%s)", f, exc)
+                continue
             if img is None:
                 continue
             h, w = img.shape[:2]
             scale = size / max(h, w)
             thumb = cv2.resize(img, (int(w * scale), int(h * scale)))
             dst = out_dir / f"thumb_{i:02d}.jpg"
-            cv2.imwrite(str(dst), thumb)
-            thumbs.append(dst)
+            if cv2.imwrite(str(dst), thumb):
+                thumbs.append(dst)
+            else:
+                log.warning("缩略图写入失败: %s", dst)
         return thumbs
 
     def _report(self, done: int, total: int, msg: str) -> None:

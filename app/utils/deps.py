@@ -23,11 +23,11 @@ TORCH_INDEX_OFFICIAL = f"https://download.pytorch.org/whl/{TORCH_CU_TAG}"
 TORCH_INDEX_MIRROR = f"https://mirror.sjtu.edu.cn/pytorch-wheels/{TORCH_CU_TAG}/"
 
 # GUI 壳必须有的 Python 库（打包后通常已内嵌）
+# 注: PLY 读写由 app/utils/ply_io.py（MIT 自研）承担, 不再依赖 GPL 的 plyfile。
 REQUIRED_PY = {
     "PySide6": "PySide6",
     "numpy": "numpy",
     "cv2": "opencv-python-headless",
-    "plyfile": "plyfile",
     "requests": "requests",
     "open3d": "open3d",
 }

@@ -34,11 +34,20 @@ echo [3/4] PyInstaller 打包(onedir)...
 %PVCMD% -m pip install pyinstaller || goto :fail
 %PVCMD% -m PyInstaller installer\UniversalSceneForge.spec --noconfirm --clean || goto :fail
 
-REM 同步 3DGS 训练仓库源码到 dist(随安装包分发, 训练环境仍隔离)
-REM /XD build: 子模块 MSVC 编译中间产物(.pyd 长路径 NSIS 打不开, 且无分发价值)
-if exist external\gaussian-splatting\train.py (
-    echo    同步 external\gaussian-splatting -^> dist ...
-    robocopy external\gaussian-splatting dist\UniversalSceneForge\external\gaussian-splatting /E /XD input .venv build /XF *.pyc /NFL /NDL /NJH /NJS >nul
+echo [3.5/4] 合规断言: 产物不得含 Inria 非商业代码 / GPL plyfile ...
+REM 合规硬约束: gaussian-splatting(Inria/MPII) 仅限非商业, 且本仓库不分发;
+REM plyfile 为 GPL-3.0+, USF 已改用自研 MIT ply_io。命中任一即构建失败。
+if exist "dist\UniversalSceneForge\external" (
+    echo *** 合规失败: dist 中出现 external\ (含 gaussian-splatting) ***
+    goto :fail
+)
+if exist "dist\UniversalSceneForge\plyfile" (
+    echo *** 合规失败: dist 中出现 plyfile (GPL-3.0+) ***
+    goto :fail
+)
+if exist "dist\UniversalSceneForge\_internal\plyfile" (
+    echo *** 合规失败: dist 中出现 plyfile (GPL-3.0+) ***
+    goto :fail
 )
 
 echo [4/4] NSIS 安装向导(未安装 makensis 时跳过)...

@@ -33,8 +33,11 @@ from app.dcc.modo_bridge import ModoBridge
 from app.dcc.ue5_bridge import UE5Bridge
 from app.models.project import ProjectState, Stage
 from app.models.settings import PipelineSettings
-from app.utils import deps
+from app.utils import deps, licensing
 from app.utils.logger import get_logger
+from app.utils.security import (PathSecurityError, ensure_output_dir,
+                                normalize_input, resolve_executable,
+                                scrubbed_env)
 
 log = get_logger("PIPELINE")
 
@@ -78,6 +81,8 @@ class PipelineController:
             {key: getattr(settings, field, None)
              for key, _name, field in DCC_PATH_FIELDS}).detect_all()
         self.failed_stages: List[str] = []
+        self._model_path: Optional[Path] = None
+        self._repair_attempted = False
 
     # ------------------------------------------------------------------ #
     def request_stop(self) -> None:
@@ -88,19 +93,37 @@ class PipelineController:
             raise PipelineAborted("用户取消")
 
     # ------------------------------------------------------------------ #
-    def execute(self, source: "Path | List[Path] | str", work_dir: Path) -> bool:
-        """source 兼容三种形态: 单路径 str/Path、多源列表（视频+图片混合）。"""
+    def execute(self, source: "Path | List[Path] | str", work_dir: Path,
+                model: Optional["Path | str"] = None) -> bool:
+        """source 兼容三种形态: 单路径 str/Path、多源列表（视频+图片混合）。
+
+        model: 可选外部点云（3DGS PLY）。提供时跳过 SFM/TRAIN, 直接进入
+        MESH —— 既服务"已有模型"场景, 也为不接受 Inria 许可的用户提供
+        合规路径（不执行非商业许可组件）。
+        """
         if isinstance(source, (str, Path)):
             sources: List[Path] = [Path(source)]
         else:
             sources = [Path(s) for s in source]
+        # M-01: 输入/输出统一规范化（符号链接解析 + 存在性 + 输出根边界）。
+        # 校验失败不向上抛: 与 INGEST 阶段失败同语义留档(1 条失败 + 其余
+        # "未执行"), 返回 False, 避免 GUI 线程直接崩溃且口径与 CLI 一致。
+        try:
+            sources = [normalize_input(s) for s in sources]
+            work_dir = ensure_output_dir(work_dir)
+            self._model_path = normalize_input(model) if model else None
+            if self._model_path and not self._model_path.is_file():
+                raise PathSecurityError(f"--model 不是文件: {self._model_path}")
+        except (PathSecurityError, OSError) as exc:
+            return self._abort_bad_paths(source, work_dir, exc)
         self.state = ProjectState(
             source="; ".join(str(s) for s in sources),
             work_dir=str(work_dir), started_at=time.time())
         log.info("=== Universal Scene Forge 启动 ===")
         log.info("输入源 x%d: %s", len(sources),
                  ", ".join(s.name for s in sources))
-        work_dir.mkdir(parents=True, exist_ok=True)
+        if self._model_path:
+            log.info("外部点云注入: %s（跳过 SFM/训练）", self._model_path)
 
         stages = [
             (Stage.INGEST.value, lambda: self._ingest(sources, work_dir)),
@@ -139,6 +162,36 @@ class PipelineController:
             pass
         self.bus.finished.emit(ok, summary)
         return ok
+
+    # ------------------------------------------------------------------ #
+    def _abort_bad_paths(self, source, work_dir: Path,
+                         exc: Exception) -> bool:
+        """路径预检被拒 → 与 INGEST 失败同语义留档并返回 False(C-04)。
+
+        安全校验本身不放宽: 越界/不存在的路径仍然拒绝, 只是把拒绝结果
+        走与采集失败一致的阶段留档流程, 而不是把异常抛给调用方。
+        """
+        raw = (str(source) if isinstance(source, (str, Path))
+               else "; ".join(str(s) for s in source))
+        self.state = ProjectState(source=raw, work_dir=str(work_dir),
+                                  started_at=time.time())
+        log.error("[SECURITY] 输入/输出路径被拒绝: %s", exc)
+        self.bus.log_line.emit("ERROR", f"[SECURITY] 路径被拒绝: {exc}")
+        self.state.record(Stage.INGEST.value, False, 0.0, message=str(exc))
+        self.failed_stages.append(Stage.INGEST.value)
+        self.bus.stage_failed.emit(Stage.INGEST.value)
+        for stage in Stage:
+            if stage.name in ("INIT", "DONE", "FAILED", "INGEST"):
+                continue
+            self.state.record(stage.value, None, 0.0, skipped=True,
+                              message="采集阶段失败, 未执行")
+        try:
+            if Path(work_dir).is_dir():
+                self.state.save(Path(work_dir) / "project.json")
+        except OSError:
+            pass
+        self.bus.finished.emit(False, f"完成(含跳过步骤): {Stage.INGEST.value}")
+        return False
 
     # ------------------------------------------------------------------ #
     #  各阶段实现
@@ -183,6 +236,9 @@ class PipelineController:
         return frames
 
     def _sfm(self, work_dir: Path) -> Path:
+        if self._model_path:
+            raise StageSkipped(
+                f"已通过外部点云跳过 SfM: {self._model_path.name}")
         # GPU 加速仅 NVIDIA (COLMAP CUDA SIFT 限制): AMD/Intel/核显自动回退
         # CPU SIFT, 功能完整仅速度差异(BUG-011 厂商适配)。
         use_gpu = self.settings.enable_cuda_accel
@@ -209,10 +265,14 @@ class PipelineController:
         """S-02: 训练前检测其他进程的 GPU 占用 (防止训练被抢速 25 倍)。"""
         try:
             import subprocess
+            exe = resolve_executable("nvidia-smi")
+            if not exe:
+                return None
             out = subprocess.run(
-                ["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                [exe, "--query-compute-apps=pid,used_memory",
                  "--format=csv,noheader"],
                 capture_output=True, text=True, timeout=10,
+                env=scrubbed_env(),
                 creationflags=subprocess.CREATE_NO_WINDOW)
             apps = [l.strip() for l in out.stdout.strip().splitlines()
                     if l.strip()]
@@ -223,6 +283,14 @@ class PipelineController:
         return None
 
     def _train(self, work_dir: Path) -> Path:
+        if self._model_path:
+            # 外部点云: 不执行 gaussian-splatting（Inria 非商业组件）, 直接登记
+            self.state.register(Stage.TRAIN.value, [self._model_path])
+            self.bus.log_line.emit(
+                "INFO", f"使用外部点云, 跳过 3DGS 训练: {self._model_path.name}")
+            log.info("[LICENSE] 外部点云路径不执行 gaussian-splatting: %s",
+                     self._model_path)
+            raise StageSkipped("使用 --model 注入点云, 未执行 3DGS 训练")
         # 训练器抽象 (0.9.6): settings.trainer 选择引擎, 不可用回退内置
         # (内置引擎内部保留 B-01 训练解释器守卫与 CUDA 加速逻辑)
         busy = self._check_gpu_busy()
@@ -267,7 +335,7 @@ class PipelineController:
         # 上限 +2 级防止显存/内存失控
         depth = self.settings.poisson_depth
         try:
-            from plyfile import PlyData
+            from app.utils.ply_io import PlyData
             n_gauss = len(PlyData.read(str(ply))["vertex"].data)
             if n_gauss > 500_000:
                 depth = min(depth + 2, 12)
@@ -322,6 +390,12 @@ class PipelineController:
         if not self.settings.enable_rizomuv:
             self.bus.dcc.emit("rizomuv", "skipped")
             raise StageSkipped("未启用 RizomUV 自动展 UV")
+        # 3.4 许可证检测桩: 只认用户自备授权, 检测不到即跳过（不绕过/不模拟）
+        try:
+            licensing.require_optional_license("rizomuv")
+        except licensing.LicenseBlocked as exc:
+            self.bus.dcc.emit("rizomuv", "off")
+            raise StageSkipped(f"RizomUV 授权未检测到, 已跳过: {exc}")
         info = self.dcc_infos.get("rizomuv")
         if not info or not info.available:
             self.bus.dcc.emit("rizomuv", "off")
@@ -347,6 +421,11 @@ class PipelineController:
         if not self.settings.enable_ue5_preview:
             self.bus.dcc.emit("ue5", "skipped")
             raise StageSkipped("未启用 UE5 实时预览")
+        try:
+            licensing.require_optional_license("ue5")
+        except licensing.LicenseBlocked as exc:
+            self.bus.dcc.emit("ue5", "off")
+            raise StageSkipped(f"UE5 授权未检测到, 已跳过: {exc}")
         info = self.dcc_infos.get("ue5")
         if not info or not info.available:
             self.bus.dcc.emit("ue5", "off")
@@ -397,7 +476,7 @@ class PipelineController:
         files = bridge.postprocess_mesh(
             mesh_in=mesh_files[0], out_dir=out, base_name="usf_scene",
             formats=[f for f in self.settings.export_formats
-                     if f in ("fbx", "glb", "gltf", "blend", "usd")],
+                     if f in ("fbx", "obj", "glb", "gltf", "blend", "usd")],
             lod_ratios=self.settings.lod_ratios,
             bake_ao=self.settings.bake_ao)
         self.bus.dcc.emit("blender", "ok")
@@ -411,6 +490,11 @@ class PipelineController:
         if not self.settings.enable_metashape_repair:
             self.bus.dcc.emit("metashape", "skipped")
             raise StageSkipped("未启用 Metashape 洞穴修复")
+        try:
+            licensing.require_optional_license("metashape")
+        except licensing.LicenseBlocked as exc:
+            self.bus.dcc.emit("metashape", "off")
+            raise StageSkipped(f"Metashape 授权未检测到, 已跳过: {exc}")
         info = self.dcc_infos.get("metashape")
         if not info or not info.available:
             self.bus.dcc.emit("metashape", "off")
@@ -436,7 +520,8 @@ class PipelineController:
         # 能交付出完整模型, 而不是交白卷。
         if not mesh_files and not getattr(self, "_repair_attempted", False):
             info = self.dcc_infos.get("metashape")
-            if info and info.available:
+            licensed = licensing.detect_optional_license("metashape")[0]
+            if info and info.available and licensed:
                 self.bus.log_line.emit(
                     "WARNING", "尚无任何网格: 为保证产出模型, 自动执行 Metashape "
                                "摄影测量修复 (兜底) …")
@@ -445,6 +530,10 @@ class PipelineController:
                 except Exception as exc:  # noqa: BLE001
                     self.bus.log_line.emit("ERROR", f"兜底修复失败: {exc}")
                 mesh_files = self._best_meshes()
+            elif info and info.available and not licensed:
+                self.bus.log_line.emit(
+                    "WARNING", "Metashape 已安装但未检测到用户自备授权, "
+                               "不执行兜底修复（不做许可证绕过）")
 
         if not mesh_files:
             raise RuntimeError(
@@ -454,9 +543,14 @@ class PipelineController:
         # 导出位置(C-09): 用户设置的导出目录优先, 否则工作目录下 output/
         if self.settings.export_dir:
             out_dir = Path(self.settings.export_dir)
-            self.bus.log_line.emit("INFO", f"导出位置: {out_dir}")
         else:
             out_dir = work_dir / "output"
+        # M-02: 导出目录边界（拒绝盘符根/系统目录, 探测可写性）
+        try:
+            out_dir = ensure_output_dir(out_dir)
+        except PathSecurityError as exc:
+            raise RuntimeError(f"导出目录不可用: {exc}") from exc
+        self.bus.log_line.emit("INFO", f"导出位置: {out_dir}")
         self._export_out_dir = out_dir
         blender = None
         bl_info = self.dcc_infos.get("blender")
@@ -491,8 +585,13 @@ class PipelineController:
         ue5 = None
         u_info = self.dcc_infos.get("ue5")
         if u_info and u_info.available and self.settings.ue5_uproject:
-            ue5 = UE5Bridge(u_info.exe, self.settings.ue5_uproject,
-                            self.settings.ue5_timeout_s)
+            licensed, detail = licensing.detect_optional_license("ue5")
+            if licensed:
+                ue5 = UE5Bridge(u_info.exe, self.settings.ue5_uproject,
+                                self.settings.ue5_timeout_s)
+            else:
+                self.bus.log_line.emit(
+                    "WARNING", f"UE5 uasset 导出跳过（无自备授权）: {detail}")
         dispatcher = ExportDispatcher(blender_bridge=blender, ue5_bridge=ue5,
                                       max_bridge=maxb, maya_bridge=mayab,
                                       houdini_bridge=houdinib, c4d_bridge=c4db,

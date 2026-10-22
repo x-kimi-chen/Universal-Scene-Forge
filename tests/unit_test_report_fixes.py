@@ -42,15 +42,28 @@ from app.core.colmap import SfmRunner, SfmError
 
 _orig_which = shutil.which
 try:
+    # 3.1/M-01 后的口径: resolve_executable 只接受"真实存在的可执行文件",
+    # 因此 PATH/显式路径用例必须落真实临时文件（防二进制投毒）。
+    _pathbin = _tmp / "pathbin"
+    _pathbin.mkdir(parents=True, exist_ok=True)
+    _fake_colmap = _pathbin / "colmap.bat"
+    _fake_colmap.write_text("@echo off\r\n", encoding="ascii")
+
     # P1a: PATH 命中 → 使用 PATH 版
-    shutil.which = lambda name: r"C:\PATH\colmap.bat" if name == "colmap" else None
+    shutil.which = lambda name: str(_fake_colmap) if name == "colmap" else None
     r1 = SfmRunner()
-    check("P1a", "PATH 命中 colmap → 使用", r1.colmap == r"C:\PATH\colmap.bat", str(r1.colmap))
+    check("P1a", "PATH 命中 colmap → 使用",
+          Path(r1.colmap or "").resolve() == _fake_colmap.resolve(),
+          str(r1.colmap))
 
     # P1b: 显式路径优先于 PATH
-    r2 = SfmRunner(colmap_exe="X:/explicit/colmap.exe")
+    _explicit = _tmp / "explicit" / "colmap.exe"
+    _explicit.parent.mkdir(parents=True, exist_ok=True)
+    _explicit.write_bytes(b"")
+    r2 = SfmRunner(colmap_exe=str(_explicit))
     check("P1b", "显式 colmap_exe 优先于 PATH",
-          r2.colmap == "X:/explicit/colmap.exe", str(r2.colmap))
+          Path(r2.colmap or "").resolve() == _explicit.resolve(),
+          str(r2.colmap))
 
     # P1c: PATH 未命中 → tools_root 便携版兜底
     shutil.which = lambda name: None
@@ -77,7 +90,7 @@ finally:
 # P2) PINHOLE 相机模型
 # --------------------------------------------------------------- #
 _captured = []
-_runner = SfmRunner(colmap_exe="X:/fake/colmap.bat")
+_runner = SfmRunner(colmap_exe=str(_fake_colmap))
 _runner._run = lambda cmd: _captured.append(list(cmd))
 _imgs = _tmp / "src"
 _imgs.mkdir(exist_ok=True)
