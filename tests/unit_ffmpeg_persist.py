@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory() as td:
           PipelineSettings.load(Path(td) / "nope.json").pip_mirror == "tsinghua")
     (Path(td) / "bad.json").write_text("{not json", encoding="utf-8")
     check("S6", "损坏 json → 默认值不抛异常",
-          PipelineSettings.load(Path(td) / "bad.json").frame_fps == 2.0)
+          PipelineSettings.load(Path(td) / "bad.json").frame_fps == 8.0)
 
 # 迁移: 冻结模式 + 新位置缺失 + 旧位置(安装目录)存在 → 读入并写一份到新位置
 with tempfile.TemporaryDirectory() as td:

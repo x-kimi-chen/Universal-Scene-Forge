@@ -1,6 +1,6 @@
 # Universal Scene Forge 开发手册 (Development Manual)
 
-> 适用版本: 0.9.8-preview 及之后 ｜ 面向: 二次开发者与维护者
+> 适用版本: 0.9.9-preview 及之后 ｜ 面向: 二次开发者与维护者
 > 架构: PySide6 GUI (MVC) + 子进程桥接各 DCC/引擎, 全部桥接失败均优雅降级
 
 ---

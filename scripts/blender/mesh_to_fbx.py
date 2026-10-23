@@ -359,6 +359,70 @@ def merge_uv_layers(obj) -> None:
         f"（{', '.join(dropped)}）→ UVMap")
 
 
+def _uv_area(mesh):
+    """UV 三角形总面积（0-1 归一化坐标）。用于判断 atlas 是否被浪费。"""
+    try:
+        uv = mesh.uv_layers.active.data
+    except (AttributeError, TypeError):
+        return 0.0
+    total = 0.0
+    for p in mesh.polygons:
+        pts = [uv[li].uv for li in p.loop_indices]
+        for i in range(1, len(pts) - 1):
+            x1, y1 = pts[0]
+            x2, y2 = pts[i]
+            x3, y3 = pts[i + 1]
+            total += abs((x2 - x1) * (y3 - y1)
+                         - (x3 - x1) * (y2 - y1)) * 0.5
+    return total
+
+
+def _pack_face_atlas(mesh):
+    """把每个三角面映射到独立的网格单元（自定义 lightmap atlas）。
+
+    高密度/非流形网格上 smart_project 会退化成极小岛，atlas 只有 2% 被使用，
+    烘焙结果是稀疏黑块。这里按面数开平方建格子, 每个三角形占据一格:
+    - 覆盖稳定（约 40-50% atlas, 无大面积空洞）;
+    - 颜色来自顶点色插值, 每格 8-12 px（4096 贴图）足够;
+    - 不依赖 Blender lightmap_pack 的版本差异。
+    """
+    loops = mesh.loops
+    if not loops:
+        return 0.0
+    for layer in list(mesh.uv_layers):
+        try:
+            mesh.uv_layers.remove(layer)
+        except (AttributeError, RuntimeError):
+            pass
+    layer = mesh.uv_layers.new(name="UVMap")
+    uv = layer.data
+    triangles = []
+    for p in mesh.polygons:
+        li = list(p.loop_indices)
+        for k in range(1, len(li) - 1):
+            triangles.append((li[0], li[k], li[k + 1]))
+    n = len(triangles)
+    if n == 0:
+        return 0.0
+    grid = max(1, int(math.ceil(math.sqrt(n))))
+    cell = 1.0 / grid
+    margin = 0.06 * cell
+    size = cell - 2 * margin
+    for idx, (a, b, c) in enumerate(triangles):
+        gx, gy = idx % grid, idx // grid
+        u0 = gx * cell + margin
+        v0 = gy * cell + margin
+        uv[a].uv = (u0, v0)
+        uv[b].uv = (u0 + size, v0)
+        uv[c].uv = (u0, v0 + size)
+    try:
+        layer.active_render = True
+        mesh.uv_layers.active = layer
+    except (AttributeError, TypeError):
+        pass
+    return _uv_area(mesh)
+
+
 def smart_uv(obj):
     """确保对象有可用的 UV。已有但为空/退化的 UV 会被重建。
 
@@ -397,14 +461,29 @@ def smart_uv(obj):
         bpy.ops.mesh.select_all(action="SELECT")
         try:
             bpy.ops.uv.smart_project(
-                angle_limit=math.radians(66.0), island_margin=0.02,
+                angle_limit=math.radians(89.0), island_margin=0.001,
                 correct_aspect=True, scale_to_bounds=True)
         except TypeError:      # 旧版参数集
             bpy.ops.uv.smart_project(
-                angle_limit=math.radians(66.0), island_margin=0.02)
+                angle_limit=math.radians(89.0), island_margin=0.001)
         bpy.ops.object.mode_set(mode="OBJECT")
 
     _with_override(obj, _uv_ops)
+    # 高密度/非流形网格上 smart_project 可能退化成“每面一个岛”,
+    # atlas 覆盖率极低（大量黑块）。检测到覆盖率不足时改用 lightmap pack:
+    # 每面独立占格, 保证 0-1 空间被有效利用, 颜色烘焙完整.
+    try:
+        coverage = _uv_area(mesh)
+    except Exception:  # noqa: BLE001
+        coverage = 1.0
+    if coverage < 0.08:
+        usf_log(f"警告: {obj.name} UV 覆盖率仅 {coverage:.3f}, 使用逐面 atlas")
+        try:
+            coverage = _pack_face_atlas(mesh)
+            obj["usf_face_atlas"] = 1
+            usf_log(f"逐面 atlas 完成: {obj.name} (覆盖率 {coverage:.3f})")
+        except Exception as exc:  # noqa: BLE001
+            usf_log(f"逐面 atlas 失败: {exc}")
     if not _uv_usable(mesh):
         def _cube_ops():
             bpy.ops.object.mode_set(mode="EDIT")
@@ -469,48 +548,82 @@ def scene_render_engine():
     return bpy.context.scene.render.engine
 
 
-def bake_texture(obj, mat, tex_path, size=2048):
+def _encode_srgb_image(img):
+    """把烘焙缓冲的线性颜色编码成 sRGB 再保存。
+
+    Cycles 把颜色属性按线性值写进 8-bit 烘焙图，而 PNG 默认按 sRGB 解释；
+    不编码会得到一张整体偏暗的贴图（渲染/外部引擎都变暗）。逐像素编码
+    可保证 .blend、FBX 嵌图、GLB 三种交付外观一致。
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return
+    buf = np.empty(len(img.pixels), dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    px = buf.reshape(-1, 4)
+    rgb = np.clip(px[:, :3], 0.0, 1.0)
+    px[:, :3] = np.where(rgb <= 0.0031308, rgb * 12.92,
+                         1.055 * np.power(rgb, 1.0 / 2.4) - 0.055)
+    img.pixels.foreach_set(buf)
+    img.update()
+
+
+def bake_texture(obj, mat, tex_path, size=4096):
     """把当前材质外观烘焙到 UV 贴图, 并让 BaseColor 改用该贴图。
 
     前置: obj 已有 UV (smart_uv)。烘焙后 FBX/GLB 交付带真实贴图,
     观感显著优于纯顶点色。open3d 顶点色链路下等价于"外观烘焙"。
     所有 bpy.ops 走 _with_override, 避免 --background 下缺少活动窗口失败。
+    高分辨率失败时回退 2048, 保证交付不因显存/内存不足中断。
     """
-    scene = bpy.context.scene
-    prev_engine = scene_render_engine()
-    try:
-        img = bpy.data.images.new("USF_BakedTex", size, size, alpha=False)
-        img.filepath_raw = str(tex_path)
-        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
-        tex.image = img
-        mat.node_tree.nodes.active = tex
-        tex.select = True
+    def _attempt(px):
+        scene = bpy.context.scene
+        prev_engine = scene_render_engine()
+        try:
+            img = bpy.data.images.new("USF_BakedTex", px, px, alpha=False)
+            img.filepath_raw = str(tex_path)
+            tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+            tex.image = img
+            mat.node_tree.nodes.active = tex
+            tex.select = True
 
-        def _bake_ops():
-            bpy.ops.object.mode_set(mode="OBJECT")
-            set_engine("CYCLES")     # 烘焙仅 CYCLES 支持
-            scene.cycles.samples = 1
-            bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"},
-                                use_clear=True, use_selected_to_active=False)
-        _with_override(obj, _bake_ops)
-        img.save()
+            def _bake_ops():
+                bpy.ops.object.mode_set(mode="OBJECT")
+                set_engine("CYCLES")     # 烘焙仅 CYCLES 支持
+                scene.cycles.samples = 1
+                # 逐面 atlas 的岛只有 ~10px, 大 margin 会串色
+                margin = 2 if obj.get("usf_face_atlas") else 8
+                bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"},
+                                    use_clear=True, use_selected_to_active=False,
+                                    margin=margin)
+            _with_override(obj, _bake_ops)
+            _encode_srgb_image(img)
+            img.save()
 
-        # BaseColor 改接贴图 (保留顶点色属性节点便于回退)
-        bsdf = next((n for n in mat.node_tree.nodes
-                     if n.type == "BSDF_PRINCIPLED"), None)
-        if bsdf:
-            for link in list(mat.node_tree.links):
-                if link.to_node == bsdf and link.to_socket.name == "Base Color":
-                    mat.node_tree.links.remove(link)
-            mat.node_tree.links.new(tex.outputs["Color"],
-                                    bsdf.inputs["Base Color"])
-        usf_log(f"纹理烘焙完成: {size}x{size} → {tex_path.name}")
-        return True
-    except Exception as exc:  # noqa: BLE001 烘焙失败回退顶点色, 不阻断
-        usf_log(f"纹理烘焙跳过: {exc}")
-        return False
-    finally:
-        set_engine(prev_engine)
+            # BaseColor 改接贴图 (保留顶点色属性节点便于回退)
+            bsdf = next((n for n in mat.node_tree.nodes
+                         if n.type == "BSDF_PRINCIPLED"), None)
+            if bsdf:
+                for link in list(mat.node_tree.links):
+                    if link.to_node == bsdf and link.to_socket.name == "Base Color":
+                        mat.node_tree.links.remove(link)
+                mat.node_tree.links.new(tex.outputs["Color"],
+                                        bsdf.inputs["Base Color"])
+            usf_log(f"纹理烘焙完成: {px}x{px} → {tex_path.name}")
+            return True
+        finally:
+            set_engine(prev_engine)
+
+    sizes = [size] if size <= 2048 else [size, 2048]
+    for px in sizes:
+        try:
+            if _attempt(px):
+                return True
+        except Exception as exc:  # noqa: BLE001 烘焙失败回退顶点色, 不阻断
+            usf_log(f"纹理烘焙 {px}x{px} 失败: {exc}")
+    usf_log("纹理烘焙跳过: 保留顶点色交付")
+    return False
 
 
 # --------------------------------------------------------------------- #
@@ -723,7 +836,9 @@ def main():
             mat = objs[0].data.materials[0] if objs[0].data.materials else None
             if mat is None:
                 raise RuntimeError("材质创建失败, 无可用烘焙目标")
-            bake_texture(objs[0], mat, out_dir / f"{base}_texture.png")
+            tex_size = int(params.get("texture_size", 4096) or 4096)
+            bake_texture(objs[0], mat, out_dir / f"{base}_texture.png",
+                         size=tex_size)
         except Exception as exc:  # noqa: BLE001
             usf_log(f"纹理烘焙失败(不阻断): {exc}")
 

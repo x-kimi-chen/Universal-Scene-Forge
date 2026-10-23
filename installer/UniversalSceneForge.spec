@@ -41,6 +41,7 @@ a = Analysis(
     datas=[
         # DCC 内部脚本随包分发（运行期由 app/utils/paths.py 定位）
         (str(SCRIPTS / "blender"), "scripts/blender"),
+        (str(SCRIPTS / "gaussian"), "scripts/gaussian"),
         (str(SCRIPTS / "max"), "scripts/max"),
         (str(SCRIPTS / "houdini"), "scripts/houdini"),
         (str(SCRIPTS / "c4d"), "scripts/c4d"),
@@ -62,6 +63,13 @@ a = Analysis(
         # 启动时报 "Unable to import Shiboken"。显式声明包与扩展模块。
         "shiboken6",
         "shiboken6.Shiboken",
+        # 函数内延迟导入的网格后端; 显式声明避免冻结后缺模块
+        "app.core.tsdf",
+        "app.core.phototexture",
+        # numpy 2.x 把 core 降级为兼容别名，PyInstaller 不会自动收集；
+        # open3d/cv2 仍会 import numpy.core.multiarray，缺失会导致贴色失败。
+        "numpy.core", "numpy.core.multiarray", "numpy.core.umath",
+        "numpy._core", "numpy._core.multiarray", "numpy._core.umath",
         # open3d 由「依赖体检」运行期补装到 python_pkgs, PyInstaller 静态
         # 分析看不到它的 import。以下为 open3d 启动链用到的 stdlib 模块,
         # 显式收集避免冻结后出现 "No module named 'uuid'/'zoneinfo'".

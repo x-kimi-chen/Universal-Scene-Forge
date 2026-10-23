@@ -449,7 +449,10 @@ class DependencyDialog(QDialog):
             QMessageBox.warning(
                 self, "缺少 gaussian-splatting 仓库",
                 f"未在以下位置找到 train.py:\n{repo}\n\n"
-                "仓库随安装包分发, 请重新安装本软件后重试。")
+                "安装包不包含 Inria/MPII 源码。请先自行获取（非商业许可）:\n"
+                "git clone https://github.com/graphdeco-inria/gaussian-splatting "
+                "--recursive \"<目标目录>\"\n\n"
+                "或在「调用路径设置」中把训练仓库指向已有源码目录后重试。")
             return
         if deps.training_python(self.settings) is None \
                 and deps.venv_interpreter() is None:
@@ -502,6 +505,14 @@ def train_env_setup(settings: PipelineSettings, emit) -> bool:
     """
     repo = Path(settings.gs_repo)
     emit("══ 一键创建训练环境开始 ══")
+    if not (repo / "train.py").is_file():
+        emit(f"✘ 未找到训练源码: {repo / 'train.py'}")
+        emit("  安装包/依赖体检只创建 .venv，不包含 Inria/MPII 源码（非商业许可）。")
+        emit("  请先执行（或在 GitHub Desktop 中克隆后指向该目录）:")
+        emit(f'  git clone https://github.com/graphdeco-inria/gaussian-splatting '
+             f'--recursive "{repo}"')
+        emit("  源码就绪后重新运行本流程；已安装的 torch 会复用。")
+        return False
 
     for d in (deps.check_msvc(), deps.check_cuda_toolkit()):
         emit(("✔" if d.ok else "⚠") + f" 预检 {d.name}: {d.detail}")
@@ -1317,9 +1328,12 @@ class MainWindow(QMainWindow):
                 self._on_log("WARNING", f"自动配置保存失败: {exc}")
 
     _PRESETS = {
-        "fast":     {"fps": 8.0, "frames": 150, "iters": 9_000, "depth": 9},
-        "standard": {"fps": 5.0, "frames": 300, "iters": 15_000, "depth": 9},
-        "quality":  {"fps": 5.0, "frames": 300, "iters": 30_000, "depth": 10},
+        "fast":     {"fps": 8.0, "frames": 150, "iters": 9_000, "depth": 10,
+                     "opacity": 0.10, "density": 0.01, "texture": 4096},
+        "standard": {"fps": 5.0, "frames": 300, "iters": 15_000, "depth": 11,
+                     "opacity": 0.10, "density": 0.01, "texture": 4096},
+        "quality":  {"fps": 5.0, "frames": 300, "iters": 30_000, "depth": 12,
+                     "opacity": 0.08, "density": 0.005, "texture": 4096},
     }
 
     def _apply_preset(self, index: int):
@@ -1331,8 +1345,11 @@ class MainWindow(QMainWindow):
         self.sp_frames.setValue(cfg["frames"])
         self.sp_iters.setValue(cfg["iters"])
         self.settings.poisson_depth = cfg["depth"]
+        self.settings.opacity_threshold = cfg["opacity"]
+        self.settings.density_quantile = cfg["density"]
+        self.settings.texture_size = cfg["texture"]
         self._on_log("INFO", f"已应用质量预设 {self.preset.currentText()}"
-                             "（网格深度随导出自动适配, 仍可手动微调）")
+                             "（含不透明度过滤/密度裁剪/贴图分辨率）")
 
     def _browse_export_dir(self):
         d = QFileDialog.getExistingDirectory(

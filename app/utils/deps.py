@@ -119,7 +119,7 @@ def check_training_env(settings: PipelineSettings) -> List[DepStatus]:
         name="gaussian-splatting 仓库", kind="train", ok=has_repo,
         detail="train.py 就绪" if has_repo else "未找到 train.py",
         fix_hint="" if has_repo
-        else "重装 USF（external/gaussian-splatting 随包分发）或 git clone --recursive")]
+        else "安装包不含 Inria 源码；请 git clone --recursive 后重新体检")]
 
     py = training_python(settings)
     if py is None:
@@ -449,6 +449,9 @@ def ensure_venv_for_training(gs_repo: Path) -> Optional[Path]:
 
     冻结模式下 sys.executable 是主程序 EXE, 不能拿来建 venv——
     复用 venv_interpreter() 的解析（py 启动器/uv 目录, 版本对齐优先）。"""
+    if not (Path(gs_repo) / "train.py").is_file():
+        log.error("创建训练环境失败: %s 下没有 train.py（源码未获取）", gs_repo)
+        return None
     venv_dir = Path(gs_repo) / ".venv"
     py = venv_dir / "Scripts" / "python.exe"
     if py.exists():

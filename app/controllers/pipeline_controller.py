@@ -331,6 +331,36 @@ class PipelineController:
         ply = self.state.artifacts.get(Stage.TRAIN.value, [None])[0]
         if not ply:
             raise RuntimeError("无点云可重建（TRAIN 阶段未产出高斯模型）")
+        # TSDF 优先: 泊松重建把半透明高光主体（黑色鼠标）当噪声, 容易
+        # 只剩背景薄片。深度图融合能得到完整表面; 缺相机/环境时自动回退。
+        if getattr(self.settings, "enable_tsdf", True):
+            try:
+                from app.core.tsdf import build_mesh_from_depth
+                from app.utils import deps
+                py = deps.training_python(self.settings)
+                model_dir = Path(ply).parents[2]
+                if py and (model_dir / "cameras.json").is_file():
+                    self.bus.log_line.emit(
+                        "INFO", "网格后端: TSDF（3DGS 深度融合）")
+                    objs = build_mesh_from_depth(
+                        Path(ply), model_dir, work_dir / "dataset",
+                        work_dir / "mesh",
+                        gs_repo=Path(self.settings.gs_repo),
+                        gs_python=str(py),
+                        lod_ratios=self.settings.lod_ratios,
+                        max_faces=150_000,
+                        timeout_s=min(self.settings.blender_timeout_s, 1800),
+                        log_cb=lambda m: self.bus.log_line.emit(
+                            "INFO", f"tsdf| {m}"),
+                        stop_event=self.stop_event)
+                    self.state.register(Stage.MESH.value, objs)
+                    for f in objs:
+                        self.bus.artifact.emit(str(f))
+                    return objs
+                log.info("TSDF 跳过: 无训练解释器或相机位姿, 使用泊松重建")
+            except Exception as exc:  # noqa: BLE001 —— TSDF 失败不阻断
+                self.bus.log_line.emit(
+                    "WARNING", f"TSDF 网格不可用, 回退泊松重建: {exc}")
         # Q-02 自适应细节: 高斯数量大时自动加深泊松八叉树 (面数约 4x/级),
         # 上限 +2 级防止显存/内存失控
         depth = self.settings.poisson_depth
@@ -352,7 +382,9 @@ class PipelineController:
             opacity_threshold=self.settings.opacity_threshold,
             density_quantile=self.settings.density_quantile)
         objs = extractor.run(Path(ply), work_dir / "mesh",
-                             lod_ratios=self.settings.lod_ratios)
+                             lod_ratios=self.settings.lod_ratios,
+                             dataset_dir=work_dir / "dataset",
+                             model_dir=work_dir / "model")
         self.state.register(Stage.MESH.value, objs)
         for f in objs:
             self.bus.artifact.emit(str(f))
@@ -596,13 +628,28 @@ class PipelineController:
                                       max_bridge=maxb, maya_bridge=mayab,
                                       houdini_bridge=houdinib, c4d_bridge=c4db,
                                       modo_bridge=modob)
+        # FBX 与 .blend 是硬性交付要求: 即使设置里漏勾/旧配置未包含,
+        # 也强制加入导出列表; 二者由 Blender 权威导出（FBX 另有 DCC 兜底）。
+        formats = list(dict.fromkeys([*self.settings.export_formats,
+                                      "fbx", "blend"]))
+        added = [f for f in ("fbx", "blend")
+                 if f not in self.settings.export_formats]
+        if added:
+            self.bus.log_line.emit(
+                "INFO", f"导出格式补齐必需项: {', '.join(added)}")
         results = dispatcher.export_all(
-            mesh_files[0], out_dir,
-            formats=self.settings.export_formats,
+            mesh_files[0], out_dir, formats=formats,
             lod_ratios=self.settings.lod_ratios,
-            bake_ao=self.settings.bake_ao)
+            bake_ao=self.settings.bake_ao,
+            texture_size=getattr(self.settings, "texture_size", 4096))
         flat = [f for files in results.values() for f in files
                 if Path(f).exists()]   # 只登记真实落盘的产物
+        missing_required = [f for f in ("fbx", "blend")
+                            if not results.get(f)]
+        if missing_required:
+            raise RuntimeError(
+                "必需格式导出缺失: " + ", ".join(missing_required)
+                + "（请确认 Blender 可用且未在导出阶段报错）")
 
         # 高斯泼溅场景交付: 训练产出的 splat PLY 复制到导出目录,
         # 可直接拖入 SuperSplat / PlayCanvas / Luma 等查看器查看编辑

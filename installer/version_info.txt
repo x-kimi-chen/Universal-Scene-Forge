@@ -18,12 +18,12 @@ VSVersionInfo(
       StringTable('080404b0', [
         StringStruct('CompanyName', 'USF Project'),
         StringStruct('FileDescription', '3DGS 场景重建与 DCC 自动化导出工具'),
-        StringStruct('FileVersion', '0.9.8-preview'),
+        StringStruct('FileVersion', '0.9.9-preview'),
         StringStruct('InternalName', 'UniversalSceneForge'),
         StringStruct('LegalCopyright', 'USF Project'),
         StringStruct('OriginalFilename', 'UniversalSceneForge.exe'),
         StringStruct('ProductName', 'Universal Scene Forge'),
-        StringStruct('ProductVersion', '0.9.8-preview'),
+        StringStruct('ProductVersion', '0.9.9-preview'),
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [2052, 1200])])

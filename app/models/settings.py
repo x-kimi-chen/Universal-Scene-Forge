@@ -59,7 +59,7 @@ PIP_MIRROR_LABELS = {
 @dataclass
 class PipelineSettings:
     # ---- 输入抽取 ----
-    frame_fps: float = 2.0            # 视频抽帧帧率
+    frame_fps: float = 8.0            # 视频抽帧帧率（3DGS 需要足够视角覆盖）
     max_frames: int = 300             # 抽帧上限（3DGS 常规 100~400 帧足够）
     preprocess_max_side: int = 1600   # 预处理最长边像素（降采样省显存）
     preprocess_workers: int = 8       # CPU 预处理线程数
@@ -73,9 +73,12 @@ class PipelineSettings:
     train_timeout_s: int = 14_400     # 3DGS 训练墙钟上限（防挂死）
 
     # ---- 网格 ----
-    poisson_depth: int = 9
-    opacity_threshold: float = 0.35   # 高斯不透明度过滤阈值
-    density_quantile: float = 0.02    # 泊松密度下分位裁剪
+    poisson_depth: int = 10
+    opacity_threshold: float = 0.10   # 高斯不透明度过滤阈值（0.35 会滤掉
+                                      # 黑色高光主体，只剩背景）
+    density_quantile: float = 0.01    # 泊松密度下分位裁剪
+    texture_size: int = 4096          # 烘焙贴图分辨率（2048 对近景纹理偏糊）
+    enable_tsdf: bool = True          # 3DGS 深度 → TSDF 网格（质量优先）
     lod_ratios: List[float] = field(default_factory=lambda: [1.0, 0.5, 0.25])
 
     # ---- DCC ----
@@ -168,6 +171,14 @@ class PipelineSettings:
     @classmethod
     def _from_json(cls, text: str) -> "PipelineSettings":
         data = json.loads(text)
+        # 0.9.9 质量修复一次性迁移: 旧默认值 0.35/0.02/9 会把黑色主体
+        # 直接滤掉（13% 高斯残留）。只在用户仍是旧默认值时升级。
+        if data.get("opacity_threshold") == 0.35:
+            data["opacity_threshold"] = 0.10
+        if data.get("density_quantile") == 0.02:
+            data["density_quantile"] = 0.01
+        if data.get("poisson_depth") == 9:
+            data["poisson_depth"] = 10
         valid = {f.name for f in cls.__dataclass_fields__.values()}
         return cls(**{k: v for k, v in data.items() if k in valid})
 

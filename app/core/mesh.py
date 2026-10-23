@@ -24,9 +24,9 @@ class MeshError(RuntimeError):
 
 
 class SplatMeshExtractor:
-    def __init__(self, poisson_depth: int = 9,
-                 opacity_threshold: float = 0.35,
-                 density_quantile: float = 0.02):
+    def __init__(self, poisson_depth: int = 10,
+                 opacity_threshold: float = 0.10,
+                 density_quantile: float = 0.01):
         self.depth = poisson_depth
         self.opacity_threshold = opacity_threshold
         self.density_quantile = density_quantile
@@ -62,10 +62,39 @@ class SplatMeshExtractor:
         return points[mask], colors[mask]
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _normal_radius(points: np.ndarray) -> float:
+        """按最近邻间距估计法向搜索半径（对场景尺度自适应）。"""
+        try:
+            import open3d as o3d
+        except ImportError:
+            return 0.1
+        n = len(points)
+        if n < 100:
+            return 0.1
+        rng = np.random.default_rng(0)
+        sample = points[rng.choice(n, min(3000, n), replace=False)]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(sample)
+        tree = o3d.geometry.KDTreeFlann(pcd)
+        ds = []
+        for i in range(len(sample)):
+            cnt, _idx, d2 = tree.search_knn_vector_3d(sample[i], 2)
+            if cnt > 1:
+                ds.append(np.sqrt(d2[1]))
+        if not ds:
+            return 0.1
+        median = float(np.median(ds))
+        diag = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
+        return float(np.clip(median, max(0.01, 0.002 * diag), 0.1 * diag))
+
+    # ------------------------------------------------------------------ #
     def to_mesh_obj(self, points: np.ndarray, colors: np.ndarray,
                     obj_path: Path, base_name: str = "usf_scene",
-                    lod_ratios: List[float] = (1.0, 0.5, 0.25)) -> List[Path]:
-        """泊松重建 + 顶点色回传 + LOD 减面，输出 OBJ 系列。"""
+                    lod_ratios: List[float] = (1.0, 0.5, 0.25),
+                    dataset_dir: Optional[Path] = None,
+                    model_dir: Optional[Path] = None) -> List[Path]:
+        """泊松重建 + 顶点色回传 + 影像投影贴色 + LOD 减面，输出 OBJ 系列。"""
         try:
             import open3d as o3d
         except ImportError as exc:
@@ -76,8 +105,13 @@ class SplatMeshExtractor:
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
+        # 法向估计半径按点间距自适应: 固定 0.6 在稠密重建上会把鼠标曲面
+        # 平滑成团, 固定过小又会在稀疏区得到噪声法向。取中位最近邻的 ~1x。
+        radius = self._normal_radius(points)
+        log.info("法向估计半径: %.3f (自适应)", radius)
         pcd.estimate_normals(
-            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.6, max_nn=30))
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                radius=radius, max_nn=30))
         pcd.orient_normals_consistent_tangent_plane(k=30)
 
         log.info("泊松重建 (depth=%d) ...", self.depth)
@@ -95,6 +129,14 @@ class SplatMeshExtractor:
         mesh = self._refine(mesh)
 
         mesh = self._transfer_colors(mesh, pcd)
+        # 原始影像投影贴色: f_dc 对黑色高光物体会偏灰, 用相机影像才是
+        # 接近视频的真实外观。缺少相机位姿/影像时自动跳过。
+        if dataset_dir is not None and model_dir is not None:
+            try:
+                from app.core.phototexture import colorize_from_views
+                colorize_from_views(mesh, Path(dataset_dir), Path(model_dir))
+            except Exception as exc:  # noqa: BLE001 —— 贴色失败不影响几何
+                log.warning("影像投影贴色失败, 保留 DC 顶点色: %s", exc)
         mesh.compute_vertex_normals()
 
         obj_path.parent.mkdir(parents=True, exist_ok=True)
@@ -213,7 +255,8 @@ class SplatMeshExtractor:
             log.info("细化-退化清理跳过: %s", exc)
         try:   # Taubin 平滑: 去高频噪点且不收缩形体 (比 Laplacian 更保形)
             before = len(mesh.vertices)
-            mesh = mesh.filter_smooth_taubin(number_of_iterations=10)
+            # 10 次会把鼠标曲面细节抹平; 2 次足以去掉泊松高频噪点
+            mesh = mesh.filter_smooth_taubin(number_of_iterations=2)
             log.info("细化: Taubin 平滑 %d → %d 顶点", before, len(mesh.vertices))
         except Exception as exc:  # noqa: BLE001
             log.info("细化-平滑跳过: %s", exc)
@@ -238,7 +281,9 @@ class SplatMeshExtractor:
     # ------------------------------------------------------------------ #
     def run(self, ply_path: Path, out_dir: Path,
             base_name: str = "usf_scene",
-            lod_ratios: Optional[List[float]] = None) -> List[Path]:
+            lod_ratios: Optional[List[float]] = None,
+            dataset_dir: Optional[Path] = None,
+            model_dir: Optional[Path] = None) -> List[Path]:
         points, colors = self.load_ply(ply_path)
         if len(points) < 1000:
             raise MeshError(
@@ -246,4 +291,5 @@ class SplatMeshExtractor:
                 f"请提高抽帧数量或增加训练迭代")
         lod_ratios = lod_ratios or [1.0, 0.5, 0.25]
         return self.to_mesh_obj(points, colors, out_dir / f"{base_name}.obj",
-                                base_name, lod_ratios)
+                                base_name, lod_ratios,
+                                dataset_dir=dataset_dir, model_dir=model_dir)

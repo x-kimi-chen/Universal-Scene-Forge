@@ -44,9 +44,13 @@ $Root = Split-Path -Parent $PSScriptRoot
 $ProductName = "Universal Scene Forge"
 
 $targets = @(
-    (Join-Path $Root "dist\UniversalSceneForge\UniversalSceneForge.exe"),
-    (Join-Path $Root "installer\UniversalSceneForge_0.9.8_Preview_Setup.exe")
+    (Join-Path $Root "dist\UniversalSceneForge\UniversalSceneForge.exe")
 )
+# 自动选最新的安装包（版本号变化时无需改脚本）
+$setup = Get-ChildItem (Join-Path $Root "installer") `
+    -Filter "UniversalSceneForge_*_Setup.exe" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($setup) { $targets += $setup.FullName }
 if ($AllBinaries) {
     $binRoot = Join-Path $Root "dist\UniversalSceneForge"
     if (Test-Path $binRoot) {

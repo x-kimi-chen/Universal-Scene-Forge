@@ -559,3 +559,43 @@ M-01 追加修复后的回归：`tests/unit_qa_fixes.py`、`tests/unit_ingest_mu
   4. `compliance: 移除 GPL plyfile，改用自研 ply_io`（`ply_io.py`、`requirements.txt`）
   5. `compliance: 3DGS 商业用途阻断与可选组件授权检测`（`gaussian.py`、`licensing.py`、GUI/CLI）
   6. `fix: Blender 导出状态重置与产物校验`（`mesh_to_fbx.py`、`blender_bridge.py`）
+
+---
+
+## 附录 D：0.9.9 质量优化的安全复核（2026-10-23）
+
+### D.1 新增子进程（3DGS 深度渲染）
+
+- 入口：`app/core/tsdf.py:_run_depth()` → `scripts/gaussian/render_depth.py`。
+- 命令以**参数数组**构造，`shell=False`；解释器与脚本路径均来自
+  `settings.gs_python` / 随包的 `_internal/scripts/gaussian`，不接受
+  CLI 用户直接注入的任意可执行文件。
+- 子进程 `cwd` 固定为用户本地 3DGS 仓库；环境用 `scrubbed_env()` 剥离
+  `PYTHONPATH/PYTHONHOME/PYTHONSTARTUP`。
+- 有墙钟超时与用户取消轮询（超时/取消即 `kill`）；stdout 只保留尾部
+  40 行用于错误报告，避免日志无限增长。
+- 执行前调用 `licensing.require_3dgs_license()`；商业用途声明直接阻断，
+  不执行 Inria 渲染器，自动回退到不依赖 Inria 组件的泊松重建。
+
+### D.2 新文件读写边界
+
+- 深度/彩色帧写入 `tempfile.TemporaryDirectory()`（系统临时目录），
+  进程结束自动清理；不写用户任意路径。
+- TSDF 网格写入 `work_dir/mesh`，仍受 `ensure_output_dir` 的输出根校验。
+- 影像贴色只读取 `<work_dir>/dataset/images` 与
+  `<model>/cameras.json`，不做任何网络请求。
+
+### D.3 新增依赖
+
+- Open3D（MIT）、NumPy（BSD）、opencv-python（Apache-2.0）；无 GPL/AGPL。
+- PyInstaller 清单只新增自有脚本目录 `scripts/gaussian` 与自有模块的
+  hiddenimport；`external/`、`plyfile` 的排除断言不变。
+
+### D.4 回归结果
+
+- 全链真实视频：`build/audit/full_tsdf2_run.log`，`FULL_EXIT=0`。
+- 打包 EXE（Open3D 0.20）：`build/audit/exe_tsdf_test/stdout3.log`，
+  `EXIT=0`；ScalableTSDF 空结果时回退 UniformTSDFVolume。
+- 单元/回归：13 个中 12 个 `exit 0`；`unit_096_prep` 因 rembg 模型下载
+  超时失败（网络问题，非本次改动引入）。
+- Blender 子进程退出码 0，13 个产物；FBX/BLEND 再导入通过。

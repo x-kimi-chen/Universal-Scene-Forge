@@ -35,7 +35,8 @@ class ExportDispatcher:
     def export_all(self, mesh_obj: Path, out_dir: Path,
                    formats: List[str], base_name: str = "usf_scene",
                    lod_ratios: Optional[List[float]] = None,
-                   bake_ao: bool = False) -> Dict[str, List[Path]]:
+                   bake_ao: bool = False,
+                   texture_size: int = 4096) -> Dict[str, List[Path]]:
         # M-02: 输出目录边界校验（拒绝盘符根/系统目录, 探测可写性）
         from app.utils.security import ensure_output_dir
         out_dir = ensure_output_dir(out_dir)
@@ -53,7 +54,8 @@ class ExportDispatcher:
                 files = self.blender.postprocess_mesh(
                     mesh_in=mesh_obj, out_dir=out_dir, base_name=base_name,
                     formats=sorted(blender_formats),
-                    lod_ratios=lod_ratios, bake_ao=bake_ao)
+                    lod_ratios=lod_ratios, bake_ao=bake_ao,
+                    texture_size=texture_size)
                 for fmt in blender_formats:
                     # USD 导出器按场景内容可能产出 .usda/.usdc/.usd,
                     # 三者同属 usd 格式; 只按 fmt 字面匹配会误报"未产出"。

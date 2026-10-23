@@ -11,6 +11,7 @@ external/*/.venv/
 build/
 dist/
 installer/*.exe
+installer/*.zip
 
 # ---- 第三方大件：本地获取，不入库（详见 THIRD_PARTY_LICENSES.md）----
 # INRIA gaussian-splatting：非商业研究用途许可，本仓库不再分发其代码；

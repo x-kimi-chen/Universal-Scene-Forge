@@ -383,3 +383,26 @@ Test-Path 'dist\UniversalSceneForge\_internal\plyfile'     # False
 | 8 | `installer/usf.ico` | 项目自带资产，源码树未标注来源 | 保留；**发布前需人工确认图标版权**（低风险待办） | 🟢 低（待确认） |
 
 > 说明：第 1/2 项即使“不修改”也仍有分发风险，因此本次已从构建脚本、NSIS 脚本、PyInstaller 清单三处同时切断；旧版 `0.9.5/0.9.6/0.9.7` 安装包因包含 external 内容已删除，仅保留重新构建的 `0.9.8`。
+
+---
+
+## 9. 质量优化新增代码的合规边界（0.9.9-preview）
+
+| 新增文件 | 许可 | 与上游的关系 |
+|---|---|---|
+| `app/core/tsdf.py` | USF 自有，MIT | 只调用 Open3D 与本机 3DGS 仓库，不复制 Inria 代码 |
+| `app/core/phototexture.py` | USF 自有，MIT | 读取用户数据集影像与 `cameras.json`，无第三方代码 |
+| `scripts/gaussian/render_depth.py` | USF 自有，MIT | 运行时 `import` 用户本地 Inria 仓库的 `scene`/`gaussian_renderer`；不打包、不再分发上游代码 |
+| `scripts/blender/mesh_to_fbx.py`（改动） | USF 自有，MIT | 仍仅作为 Blender 子进程脚本；不打包 Blender 本体 |
+
+- **构建隔离不变**：`installer/UniversalSceneForge.spec` 仅新增
+  `scripts/gaussian`（自有脚本）目录，未引用 `external/`；`build_windows.bat`
+  的“dist 出现 external 即失败”断言保留。
+- **商用阻断覆盖新路径**：TSDF 深度渲染前调用
+  `licensing.require_3dgs_license()`；声明商业用途时抛 `LicenseBlocked`，
+  TSDF 被跳过，回退到不执行 Inria 组件的泊松重建（外部点云仍可交付）。
+- **无新增 GPL/AGPL**：新链路使用 numpy（BSD）、Open3D（MIT）、
+  opencv-python（Apache-2.0），均为宽松许可；未引入 plyfile、FFmpeg 或
+  Blender 代码。
+- **用户义务不变**：Inria 仓库与训练 venv 需用户自行获取并遵守
+  `LICENSE.md` 的非商业条款；本版不提供、不托管、不打包该仓库。

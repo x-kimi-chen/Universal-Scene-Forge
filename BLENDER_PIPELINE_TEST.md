@@ -470,3 +470,74 @@ POSITION, NORMAL, TEXCOORD_0, TANGENT
 1. **切线质量**：TANGENT 由 Blender 基于 UV + 法线生成；极端退化 UV 可能产生零切线，消费端应回退到屏幕空间切线。
 2. **UV 合并不做 atlas**：保留一套 canonical UV；若需要把多套 UV 打包成图集，需要材质/贴图映射信息与重新烘焙。
 3. **UASSET**：仍需 UE5。
+
+---
+
+## 9. 重建外观质量优化（2026-10-23 第四轮）
+
+### 9.1 问题定位
+
+旧链路（9000/30000 轮训练 → 不透明度 0.35 → 泊松 depth 10 → 2048 贴图）
+在真实手机视频（黑色鼠标 + 编织垫）上出现：
+
+- 不透明度过滤只保留 13% 高斯，几乎全是背景；鼠标的高斯中位数仅 0.077；
+- 泊松把高斯中心当表面点，鼠标重建成长条薄片，中央留下大洞；
+- `f_dc` 直流项对黑色高光物体偏灰，顶点色是灰白而非黑色；
+- Cycles 烘焙把线性颜色直接写进 8-bit PNG，贴图整体偏暗；
+- 高密度/非流形网格上 smart UV 覆盖率仅 1.9%，烘焙结果是稀疏黑块。
+
+### 9.2 实现
+
+| 能力 | 代码位置 | 行为 |
+|---|---|---|
+| TSDF 网格后端 | `app/core/tsdf.py` | 3DGS 渲染 alpha 归一化深度 → Open3D TSDF 融合 → 碎片清理/平滑/减面 |
+| 深度渲染桥接 | `scripts/gaussian/render_depth.py` | 白色覆盖 + 黑背景再渲染一次得到 alpha 累积，深度 = alpha / 逆深度累积 |
+| 影像投影贴色 | `app/core/phototexture.py` | 相机位姿投影 + 射线遮挡 + 多视角加权；未覆盖顶点用最近覆盖色补齐 |
+| 高斯过滤/泊松 | `app/core/mesh.py` | 不透明度 0.10、自适应法向半径、depth 10 起、Taubin 2 次 |
+| 4096 烘焙 | `scripts/blender/mesh_to_fbx.py` | `texture_size` 参数（默认 4096，失败回退 2048） |
+| sRGB 编码 | `scripts/blender/mesh_to_fbx.py` `_encode_srgb_image` | 线性缓冲 → sRGB 后再保存 PNG |
+| 逐面 atlas | `scripts/blender/mesh_to_fbx.py` `_pack_face_atlas` | UV 覆盖率 < 8% 时按三角面分配网格单元 |
+| 抽帧默认 | `app/models/settings.py` | 2.0 → 8.0 fps |
+
+### 9.3 全链实测（2026-10-23）
+
+- 输入：`D:\one\Desktop\46c1153bad83ddbc3d7563a9111c7215.mp4`（1280×720）
+- 抽帧：8 fps → 146 帧；COLMAP 注册 81 视角
+- 训练：30000 轮，训练集 PSNR 37.70
+- 网格（源环境 Open3D 0.19）：TSDF 0.030/0.104 → 855,853 面 →
+  清理 766,864 → 减面 150,000
+- 贴色：82.9% 顶点有可见视角，平均 3.86 视角/顶点
+- 烘焙：4096×4096，逐面 atlas 覆盖率 0.385
+- 日志：`build/audit/full_tsdf2_run.log`；`FULL_EXIT=0`
+
+### 9.3.1 打包 EXE 复测（Python 3.14 + Open3D 0.20）
+
+- Open3D 0.20 的 `ScalableTSDFVolume` 实测静默返回空网格；已新增
+  `UniformTSDFVolume` 回退（点云包围盒定体积、场景平移、uint16 深度）。
+- 命令：`UniversalSceneForge.exe --cli --input <video> --model <ply> --output <work>`
+- 日志：`build/audit/exe_tsdf_test/stdout3.log`，`EXIT=0`
+- 过程：TSDF 0.030/0.104 → Uniform `L=16.12 res=429 voxel=0.0376` →
+  502,047 面 → 碎片清理 461,104 → 减面 149,999 → 贴色 85.3% →
+  4096 烘焙 → 14 个导出文件（`D:\1导出试用`）。
+- 修复：PyInstaller 显式收集 `numpy.core.multiarray` 等别名，解决 EXE 内
+  open3d/cv2 的 `No module named 'numpy.core.multiarray'`。
+
+### 9.4 视觉对比
+
+- 源帧：`build/audit/source_frame0.png`
+- 最终源相机渲染：`build/audit/quality_test/full_final_unlit.png`、
+  `full_final_lit.png`、`exe_final_cam0.png`
+- 上下对比图：`build/audit/quality_test/compare_source_vs_recon.png`
+- 与旧版环形空洞结果相比：鼠标主体、滚轮、编织垫纹理均已恢复；黑色
+  高光材质不再是灰色。
+
+### 9.5 剩余限制
+
+1. **侧壁偏扁**：TSDF 对半透明高光表面的深度是 alpha 加权近似，融合后
+   鼠标左右侧壁比原视频略扁；这是深度网格路线的固有折中。
+2. **接触面细缝**：鼠标与垫子交界的薄缝在极端视角可能出现少量孔洞；
+   已用 3.5× 截断 + 2 次 Taubin 缓解。
+3. **面数/体积**：150k 面 + 4096 贴图使 FBX/GLB 体积显著增大；需要小
+   体积时使用 LOD1/LOD2 或降低 `texture_size`。
+4. **环境依赖**：TSDF 需要用户本地 Inria 仓库与训练 venv；缺失时自动
+   回退泊松重建（合规隔离不变）。

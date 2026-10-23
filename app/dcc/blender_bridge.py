@@ -148,7 +148,8 @@ class BlenderBridge:
                          base_name: str = "usf_scene",
                          formats: List[str] = ("fbx", "glb", "blend"),
                          lod_ratios: List[float] = (1.0, 0.5, 0.25),
-                         bake_ao: bool = False) -> List[Path]:
+                         bake_ao: bool = False,
+                         texture_size: int = 4096) -> List[Path]:
         """网格 → 清理/UV/材质/LOD → FBX(嵌纹理)/GLB/BLEND。
 
         这是「调用 Blender 进行网格转 FBX」的主入口, 对应
@@ -165,6 +166,7 @@ class BlenderBridge:
             "formats": list(formats),
             "lod_ratios": list(lod_ratios),
             "bake_ao": bool(bake_ao),
+            "texture_size": int(texture_size),
         }
         script = script_path("blender", "mesh_to_fbx.py")
         if not script.exists():

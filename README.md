@@ -1,12 +1,13 @@
 # universal_scene_forge
 Universal Scene Forge：桌面端一体化 3D 场景重建与导出工具。
 
-**最新版本：`0.9.8-preview`** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](RELEASE_NOTES_0.9.8.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
+**最新版本：`0.9.9-preview`** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](RELEASE_NOTES_0.9.9.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
 
 **流水线（9 阶段，每阶段独立容错与超时兜底）**：
-视频/图像 → 3DGS 重建 → 泊松网格 → RizomUV 自动展 UV（可选）→ UE5 实时预览（可选）→ Blender 后处理 → Metashape 修复（可选）→ 多格式导出（**FBX / OBJ / GLB / BLEND / USD / UASSET**，含 LOD 与导出目录设置）。
+视频/图像 → 3DGS 重建 → **TSDF 深度融合网格**（无训练环境时回退泊松）→ 影像投影贴色 → RizomUV 自动展 UV（可选）→ UE5 实时预览（可选）→ Blender 后处理 → Metashape 修复（可选）→ 多格式导出（**FBX / OBJ / GLB / BLEND / USD / UASSET**，含 LOD 与导出目录设置）。
 
 **主要特性**：
+- **接近原视频的外观**：3DGS 深度 → TSDF 网格 + 原始影像投影贴色 + 4096 烘焙；黑色高光主体不再丢失
 - 导出完整性保障链：3DGS 网格 → Metashape 修复网格 → 自动补跑修复，保证产出模型
 - 模糊帧自动剔除（Laplacian 清晰度）、CUDA 加速开关、显卡厂商自适应（NVIDIA/AMD/Intel）
 - Blender 4.x/5.x 多版本、Metashape 2.x、UE5 预览工程自动生成
@@ -21,8 +22,8 @@ Project WIP; forks and contributions welcome. 项目仍在完善，欢迎二次�
 
 ### 方式一：Windows 安装包（推荐）
 
-从 GitHub Releases 下载 `UniversalSceneForge_0.9.8_Preview_Setup.exe`，安装后直接启动。
-绿色版下载 `UniversalSceneForge_0.9.8_Preview_portable.zip`，解压后运行 `UniversalSceneForge.exe`。
+从 GitHub Releases 下载 `UniversalSceneForge_0.9.9_Preview_Setup.exe`，安装后直接启动。
+绿色版下载 `UniversalSceneForge_0.9.9_Preview_portable.zip`，解压后运行 `UniversalSceneForge.exe`。
 发布资产校验见 `SHA256SUMS.txt`。
 
 ### 方式二：源码运行

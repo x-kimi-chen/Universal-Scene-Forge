@@ -239,6 +239,15 @@ with tempfile.TemporaryDirectory() as td:
 # --------------------------------------------------------------- #
 with tempfile.TemporaryDirectory() as td:
     repo = Path(td) / "gs"
+    repo.mkdir()
+    check("H0", "无 train.py 时拒绝创建 venv",
+          deps.ensure_venv_for_training(repo) is None
+          and not (repo / ".venv").exists())
+
+with tempfile.TemporaryDirectory() as td:
+    repo = Path(td) / "gs"
+    repo.mkdir()
+    (repo / "train.py").write_text("", encoding="utf-8")
     venv_py = repo / ".venv" / "Scripts" / "python.exe"
     venv_py.parent.mkdir(parents=True)
     venv_py.write_bytes(b"MZ")
@@ -247,6 +256,8 @@ with tempfile.TemporaryDirectory() as td:
 
 with tempfile.TemporaryDirectory() as td:
     repo = Path(td) / "gs"
+    repo.mkdir()
+    (repo / "train.py").write_text("", encoding="utf-8")
     saved_vi = deps.venv_interpreter
     try:
         deps.venv_interpreter = lambda: None
