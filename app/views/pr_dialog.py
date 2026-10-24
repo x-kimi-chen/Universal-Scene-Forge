@@ -2,7 +2,7 @@
 
 流程: 选择视频（默认取主窗口输入源中的视频）→ 设置帧率/上限/输出目录 →
 「生成任务并启动 Premiere」（安装 CEP 扩展 + 写任务 + 启动 PR）→
-在 PR 内的「USF 抽帧导出」面板点击①一键导出 → 本对话框轮询状态文件 →
+在 PR 内的「抽帧导出」面板点击①一键导出 → 本对话框轮询状态文件 →
 完成后把帧目录自动回填为主窗口输入源。
 
 与 premiere_bridge.py 的分工: 本文件只做视图与轮询, 探测/安装/任务 IO
@@ -55,7 +55,7 @@ class PrFrameDialog(QDialog):
             "用 Premiere Pro 解码器批量导帧（比 ffmpeg 逐帧 seek 更稳, "
             "还可先剪辑/调色再导出）。流程:\n"
             "1. 点击下方「生成任务并启动 Premiere」;\n"
-            "2. 在 Premiere 中打开 窗口 → 扩展 → USF 抽帧导出 面板;\n"
+            "2. 在 Premiere 中打开 窗口 → 扩展 → 抽帧导出 面板;\n"
             "3. 点击面板「① 自动导入并导出全部视频」;\n"
             "4. 导出完成后帧目录会自动加入主程序输入源。")
         tip.setWordWrap(True)
@@ -228,7 +228,7 @@ class PrFrameDialog(QDialog):
         if pb.launch_premiere(exe):
             self._log(f"已启动 Premiere ({exe})。")
             self.lbl_status.setText(
-                "等待面板导出… 在 PR 中: 窗口 → 扩展 → USF 抽帧导出 → 点「①」")
+                "等待面板导出… 在 PR 中: 窗口 → 扩展 → 抽帧导出 → 点「①」")
         else:
             self.lbl_status.setText("Premiere 启动失败, 可手动打开。")
 

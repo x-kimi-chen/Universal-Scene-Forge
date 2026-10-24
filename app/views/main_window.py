@@ -259,7 +259,7 @@ class DependencyDialog(QDialog):
         if not core_miss and not train_miss:
             self.lbl_verdict.setText(
                 '<span style="color:#22c55e;font-weight:bold;">✔ 依赖完整</span>'
-                " — GUI 与全部 8 个重建阶段均可执行（含 3DGS 训练）。")
+                " — GUI 与全部 9 个重建阶段均可执行（含 3DGS 训练）。")
         elif not core_miss:
             self.lbl_verdict.setText(
                 '<span style="color:#f59e0b;font-weight:bold;">◐ 基础流水线可运行</span>'
@@ -917,7 +917,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ #
     def _build_ui(self):
-        self.setWindowTitle(f"{APP_NAME} v{__version__}")
+        self.setWindowTitle(f"{APP_NAME} V{__version__}")
         self.resize(1280, 820)
         # 弹性布局下限(P6): 固定 1280x820 在小屏/高 DPI 下文本截断,
         # 允许缩放到 980x640 仍保持全部控件可用。
@@ -1205,7 +1205,7 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         QMessageBox.about(
             self, "关于",
-            f"<b>{APP_NAME}</b> v{__version__}<br>"
+            f"<b>{APP_NAME}</b> V{__version__}<br>"
             "视频 / 图像多源输入 → SfM → 3DGS 训练 → 网格重建 → 多 DCC 导出<br>"
             f"支持 {len(DCC_PATH_FIELDS)} 款 DCC 软件自动探测与调用。<br><br>"
             "Copyright © 2026 USF Project — MIT License<br>"
