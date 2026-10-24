@@ -150,18 +150,30 @@ def main() -> int:
     _preload_open3d()
     _reconfigure_stdio()
     args = _parse_args()
-    if args.check_deps:
-        return _run_check_deps()
-    if args.cli:
-        if not args.input:
-            print("--cli 模式需要 --input")
-            return 2
-        return _run_cli(args.input, args.output, model=args.model,
-                        accept_3dgs=args.accept_3dgs_license,
-                        commercial=args.commercial_use)
+    if args.check_deps or args.cli:
+        # 打包版为窗口子系统程序, 没有控制台时 print 无处可写（旧版静默退出）。
+        from app.utils.console import ensure_console, notify_output_saved
+        fallback = ensure_console()
+        try:
+            if args.check_deps:
+                return _run_check_deps()
+            if not args.input:
+                print("--cli 模式需要 --input")
+                return 2
+            return _run_cli(args.input, args.output, model=args.model,
+                            accept_3dgs=args.accept_3dgs_license,
+                            commercial=args.commercial_use)
+        finally:
+            if fallback is not None:
+                notify_output_saved(fallback)
     from app.views.main_window import run_gui
     return run_gui()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        # Ctrl+C 属于用户主动中止: 返回 130, 与阶段失败(1)区分, 便于脚本判断。
+        print("\n已中断")
+        sys.exit(130)

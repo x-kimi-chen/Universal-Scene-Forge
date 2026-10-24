@@ -290,11 +290,14 @@ class Ingester:
         """
         if len(frames) < 8:
             return frames
-        scores = [(f, self._blur_score(f)) for f in frames]
-        vals = sorted(s for _f, s in scores)
-        median = vals[len(vals) // 2]
+        # 逐帧解码 + Laplacian 属 CPU/IO 混合负载, OpenCV 解码会释放 GIL;
+        # 300 帧串行需数秒, 线程池并行后中位数与阈值完全不变。
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            vals = list(pool.map(self._blur_score, frames))
+        ordered = sorted(vals)
+        median = ordered[len(ordered) // 2]
         threshold = median * (1.0 - drop_ratio)
-        kept = [f for f, s in scores if s >= threshold]
+        kept = [f for f, s in zip(frames, vals) if s >= threshold]
         dropped = len(frames) - len(kept)
         if dropped and len(kept) >= 6:
             log.info("剔除模糊帧 %d 张 (清晰度阈值 %.0f)", dropped, threshold)

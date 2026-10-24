@@ -23,6 +23,7 @@ from typing import Callable, List, Optional, Tuple
 
 from app.utils.paths import script_path
 from app.utils.logger import get_logger
+from app.utils.proc import kill_tree
 
 log = get_logger("C4D")
 
@@ -175,11 +176,5 @@ class C4dBridge:
     # ================================================================== #
     @staticmethod
     def _kill_tree(proc: subprocess.Popen) -> None:
-        try:
-            if sys.platform == "win32":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                               capture_output=True, timeout=15)
-            else:
-                proc.kill()
-        except (OSError, subprocess.TimeoutExpired):
-            proc.kill()
+        """终止进程树（统一走 app.utils.proc, 使用 System32 绝对路径）。"""
+        kill_tree(proc)

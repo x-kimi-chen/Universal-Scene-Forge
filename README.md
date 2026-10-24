@@ -1,7 +1,7 @@
 # universal_scene_forge
 Universal Scene Forge：桌面端一体化 3D 场景重建与导出工具。
 
-**最新版本：`1.0`** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](RELEASE_NOTES_1.0.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
+**最新版本：`0.9.9-preview`** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](RELEASE_NOTES_0.9.9.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
 
 **流水线（9 阶段，每阶段独立容错与超时兜底）**：
 视频/图像 → 3DGS 重建 → **TSDF 深度融合网格**（无训练环境时回退泊松）→ 影像投影贴色 → RizomUV 自动展 UV（可选）→ UE5 实时预览（可选）→ Blender 后处理 → Metashape 修复（可选）→ 多格式导出（**FBX / OBJ / GLB / BLEND / USD / UASSET**，含 LOD 与导出目录设置）。
@@ -22,8 +22,8 @@ Project WIP; forks and contributions welcome. 项目仍在完善，欢迎二次�
 
 ### 方式一：Windows 安装包（推荐）
 
-从 GitHub Releases 下载 `UniversalSceneForge_1.0_Setup.exe`，安装后直接启动。
-绿色版下载 `UniversalSceneForge_1.0_portable.zip`，解压后运行 `UniversalSceneForge.exe`。
+从 GitHub Releases 下载 `UniversalSceneForge_0.9.9_Preview_Setup.exe`，安装后直接启动。
+绿色版下载 `UniversalSceneForge_0.9.9_Preview_portable.zip`，解压后运行 `UniversalSceneForge.exe`。
 发布资产校验见 `SHA256SUMS.txt`。
 
 ### 方式二：源码运行
@@ -90,3 +90,7 @@ pip install plyfile tqdm opencv-python joblib
 ```
 
 也可在 GUI 内通过「依赖体检」引导完成。克隆与使用 gaussian-splatting 即表示你接受其非商业研究许可条款。
+## 开发方式与质量记录
+
+- 本项目在开发中使用了 AI 编程助手，参与范围、人工控制措施与不涉及项见 [AI_ASSISTANCE.md](AI_ASSISTANCE.md)。
+- 1.0 定稿前的重构、缺陷修复与性能优化记录见 [docs/CODE_REVIEW_1.0.md](docs/CODE_REVIEW_1.0.md)。
