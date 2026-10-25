@@ -94,12 +94,14 @@ class PlyElement:
     # -- data ---------------------------------------------------------- #
     @property
     def data(self) -> np.ndarray:
+        """点云数据的读写入口。getter 返回字段字典，setter 校验必需字段后整体替换。"""
         if self._data is None:
             self._data = np.zeros(self.count, dtype=self._dtype())
         return self._data
 
     @data.setter
     def data(self, arr: np.ndarray) -> None:
+        """点云数据的读写入口。getter 返回字段字典，setter 校验必需字段后整体替换。"""
         arr = np.asarray(arr)
         if arr.dtype.names is None:
             raise PlyIOError("元素 data 必须是结构化数组")
@@ -112,6 +114,7 @@ class PlyElement:
     @classmethod
     def describe(cls, arr: np.ndarray, name: str,
                  comments: Iterable[str] = ()) -> "PlyElement":
+        """生成 PLY 头部描述：属性名、类型、元素数量，comments 原样写入注释区。"""
         el = cls(name, (), len(arr), comments)
         el.data = arr
         return el
@@ -161,6 +164,7 @@ class PlyData:
     # ------------------------------------------------------------------ #
     @classmethod
     def read(cls, path: "str | Path") -> "PlyData":
+        """从 PLY 文件读入点云。按头部标识区分 ascii 与 binary 分支，字段名保持文件中的写法。"""
         p = Path(path)
         try:
             size = p.stat().st_size
@@ -185,6 +189,7 @@ class PlyData:
     #  写
     # ------------------------------------------------------------------ #
     def write(self, path: "str | Path") -> None:
+        """把当前点云写成 PLY。字段顺序沿用读入时的顺序，头部带一行来源注释。"""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         fmt = "ascii" if self.text else (

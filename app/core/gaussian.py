@@ -89,6 +89,7 @@ class GaussianEngine:
               iterations: int = 30_000) -> Path:
         # 合规硬门（LICENSE_COMPLIANCE_CHANGES.md 3.1）:
         # 商用声明 → LicenseBlocked; 未确认非商业条款 → 拒绝执行。
+        """启动一次训练：dataset_dir 为数据集根，model_dir 为输出目录，iterations 为迭代数。"""
         licensing.require_3dgs_license(context="gaussian-splatting 训练")
         train_py = self.repo / "train.py"
         if not train_py.exists():
@@ -182,6 +183,7 @@ class GaussianEngine:
     @staticmethod
     def latest_point_cloud(model_dir: Path,
                            expected_iter: Optional[int] = None) -> Optional[Path]:
+        """在输出目录里找最新一次的 point_cloud.ply；指定迭代时优先取该迭代，找不到返回 None。"""
         root = model_dir / "point_cloud"
         if not root.exists():
             return None

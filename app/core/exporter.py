@@ -46,6 +46,7 @@ class ExportDispatcher:
                    bake_ao: bool = False,
                    texture_size: int = 4096) -> Dict[str, List[Path]]:
         # M-02: 输出目录边界校验（拒绝盘符根/系统目录, 探测可写性）
+        """按 formats 逐个尝试导出，返回「格式 → 产物路径列表」；某一路失败不中断其余格式。"""
         from app.utils.security import ensure_output_dir
         out_dir = ensure_output_dir(out_dir)
         lod_ratios = lod_ratios or [1.0, 0.5, 0.25]

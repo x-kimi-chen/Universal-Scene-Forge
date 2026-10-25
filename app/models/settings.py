@@ -140,6 +140,7 @@ class PipelineSettings:
     license_ack_3dgs: bool = False      # 已确认 gaussian-splatting 非商业许可
 
     def save(self, path: Optional[Path] = None) -> None:
+        """把当前配置写入 JSON；path 为空时写到默认配置位置。"""
         path = path or settings_file()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
@@ -148,6 +149,7 @@ class PipelineSettings:
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "PipelineSettings":
+        """读取配置。文件缺失或解析失败时回退默认值，并对旧字段做兼容迁移。"""
         p = path or settings_file()
         if not p.exists():
             # 冻结模式一次性迁移: 旧版装在安装目录（不可写）的 settings
@@ -184,4 +186,5 @@ class PipelineSettings:
 
     @property
     def mirror_url(self) -> str:
+        """返回当前镜像源对应的索引地址，用于 pip 安装时指定 -i 参数。"""
         return PIP_MIRRORS.get(self.pip_mirror, "")

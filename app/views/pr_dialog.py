@@ -267,5 +267,6 @@ class PrFrameDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def closeEvent(self, event):
+        """关闭对话框时停掉轮询定时器，避免回调落到已销毁的控件上。"""
         self.timer.stop()
         super().closeEvent(event)

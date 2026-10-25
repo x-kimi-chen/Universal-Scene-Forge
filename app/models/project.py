@@ -58,17 +58,21 @@ class ProjectState:
 
     def record(self, name: str, ok: Optional[bool], elapsed: float,
                skipped: bool = False, message: str = "") -> None:
+        """登记一个阶段的执行结果：是否成功、耗时、是否被跳过。"""
         self.records.append(StageRecord(name, ok, skipped, message, elapsed))
 
     def register(self, stage: str, files: List[Path]) -> None:
+        """把某阶段产出的文件记入产物表，供导出与完整性校验使用。"""
         bucket = self.artifacts.setdefault(stage, [])
         bucket.extend(str(f) for f in files)
 
     @property
     def all_artifacts(self) -> List[str]:
+        """汇总所有阶段登记过的产物路径。"""
         return [f for files in self.artifacts.values() for f in files]
 
     def save(self, path: Path) -> None:
+        """把项目状态写成 JSON；目标目录不存在时先创建。"""
         self.finished_at = time.time()
         payload = {
             "source": self.source,

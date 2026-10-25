@@ -144,6 +144,7 @@ def _preload_open3d() -> None:
 
 
 def main() -> int:
+    """进程入口：解析参数后分派到 GUI、命令行或依赖体检三条路径，返回退出码。"""
     setup_logging()
     from app.utils.paths import register_external_pkgs
     register_external_pkgs()   # 冻结壳 python_pkgs 补装目录（依赖体检一键安装的落地处）
