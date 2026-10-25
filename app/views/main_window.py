@@ -637,6 +637,7 @@ class _ToolInstallThread(QThread):
                     f"工具目录找回）: {exc}")
 
     def _on_progress(self, done: int, total: int):
+        """下载进度回调：done/total 是字节数，右移 20 位换 MB 显示；total 为 0 时直接返回。"""
         if not total:
             return
         mb = done >> 20
@@ -1227,6 +1228,7 @@ class MainWindow(QMainWindow):
         self._log_bridge.attach(self._on_log)
 
     def _refresh_leds_initial(self):
+        """用启动时缓存下来的 dcc_infos 点亮宿主灯；GPU 另外探测一次，失败只熄灭 CUDA 灯，不影响界面继续可用。"""
         for key, _name, _f in DCC_PATH_FIELDS:
             info = self.dcc_infos.get(key)
             self.leds[key].set_state("ok" if info and info.available else "off")
@@ -1375,6 +1377,7 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(manual)))
 
     def _start(self):
+        """点「开始重建」后的前置检查：输入源非空、路径可规范化、文件真实存在、许可确认通过。任一道没过就弹框返回；全过才建线程，并把按钮与步骤条切到运行态。"""
         sources = self._sources()
         if not sources:
             QMessageBox.warning(self, "提示",
@@ -1489,6 +1492,7 @@ class MainWindow(QMainWindow):
             self._alert_failure("重建异常终止", msg)
 
     def _on_progress(self, value: int, msg: str):
+        """进度条与提示文案的直通处理；msg 为空时保留上一句提示，避免界面闪成空白。"""
         self.progress.setValue(value)
         if msg:
             self.lbl_msg.setText(msg)
@@ -1497,6 +1501,7 @@ class MainWindow(QMainWindow):
     #  阶段步骤条
     # ------------------------------------------------------------------ #
     def _set_step_state(self, idx: int, state: str):
+        """改单个步骤格子的标记、配色与内部状态记录；索引越界直接忽略，不抛异常。"""
         if not 0 <= idx < len(self.step_labels):
             return
         mark, style = STEP_STYLES[state]
@@ -1506,6 +1511,7 @@ class MainWindow(QMainWindow):
         self._stage_states[idx] = state
 
     def _on_stage(self, name: str):
+        """进入某阶段：当前置「进行中」，它后面的回到待办，前面还停在「进行中」的补记为完成——阶段信号只报进入、不报离开。"""
         self.lbl_stage.setText(name)
         if name not in STAGE_ORDER:
             return
@@ -1550,6 +1556,7 @@ class MainWindow(QMainWindow):
             self.thumbs.addItem(item)
 
     def _on_finished(self, ok: bool, summary: str):
+        """收尾：成功时进度置满，把还停在「进行中」的步骤按结果改成完成或失败，并在状态栏与日志里各留一条同样的结论。"""
         self.progress.setValue(100 if ok else self.progress.value())
         for i, st in enumerate(self._stage_states):   # 收尾: 进行中的标记为完成/失败
             if st == "active":
