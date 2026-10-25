@@ -101,10 +101,6 @@ pip install plyfile tqdm opencv-python joblib
 
 GUI 的「依赖体检」也能引导你走完这套流程。克隆并使用即表示接受其非商业研究许可。
 
-## 关于 AI 与质量记录
+## 质量记录
 
-这个项目在开发过程中用过 AI 编程助手，具体范围、人工把关方式和明确不涉及的部分写在
-[AI_ASSISTANCE.md](AI_ASSISTANCE.md) 里，没有藏着。
-
-1.0 定稿前做过一轮重构、缺陷修复和性能优化，每条都记了改动原因与验证方式，
-见 [docs/CODE_REVIEW_1.0.md](docs/CODE_REVIEW_1.0.md)。
+1.0 定稿前做过一轮重构、缺陷修复和性能优化，每条都记了改动原因与验证方式，见 [docs/CODE_REVIEW_1.0.md](docs/CODE_REVIEW_1.0.md)。
