@@ -1,42 +1,32 @@
-# universal_scene_forge
-Universal Scene Forge：桌面端一体化 3D 场景重建与导出工具。
+# 通用场景锻造系统（Universal Scene Forge）
 
-**最新版本：`0.9.9-preview`** ｜ [更新日志](CHANGELOG.md) ｜ [发布说明](RELEASE_NOTES_0.9.9.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
+把一段视频或一批照片，做成能直接进 DCC 的模型。这个工具把散落在 COLMAP、3DGS 训练脚本、
+Blender、Metashape 之间的手工步骤串成一条流水线，中间不用你来回切窗口、手动改配置。
 
-**流水线（9 阶段，每阶段独立容错与超时兜底）**：
-视频/图像 → 3DGS 重建 → **TSDF 深度融合网格**（无训练环境时回退泊松）→ 影像投影贴色 → RizomUV 自动展 UV（可选）→ UE5 实时预览（可选）→ Blender 后处理 → Metashape 修复（可选）→ 多格式导出（**FBX / OBJ / GLB / BLEND / USD / UASSET**，含 LOD 与导出目录设置）。
+当前版本 **1.0**，九段流程：抽帧 → SfM 求位姿 → 3DGS 训练 → TSDF 建网格 → 影像投影贴色 →
+展 UV 或 UE5 预览（可选）→ Blender 后处理 → Metashape 修补（可选）→ 导出
+FBX / OBJ / GLB / BLEND / USD / UASSET。每段都能单独失败，失败点不影响后面的降级链——
+训练环境没装就走泊松，UE5 没装就跳过预览，最后至少给你一个能打开的模型。
 
-**主要特性**：
-- **接近原视频的外观**：3DGS 深度 → TSDF 网格 + 原始影像投影贴色 + 4096 烘焙；黑色高光主体不再丢失
-- 导出完整性保障链：3DGS 网格 → Metashape 修复网格 → 自动补跑修复，保证产出模型
-- 模糊帧自动剔除（Laplacian 清晰度）、CUDA 加速开关、显卡厂商自适应（NVIDIA/AMD/Intel）
-- Blender 4.x/5.x 多版本、Metashape 2.x、UE5 预览工程自动生成
-- 依赖体检 + 🚀 一键自动配置全部环境（Python 库/工具/扩展/训练环境/DCC 路径）
-- 运行日志落盘（logs/usf_*.log）、导出位置自定义、模糊帧剔除
+[更新日志](CHANGELOG.md) ｜ [1.0 发布说明](RELEASE_NOTES_1.0.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
 
-Desktop all-in-one 3D reconstruction & export: video/images → 3DGS → mesh →
-(optional RizomUV UV / UE5 preview / Metashape repair) → FBX/OBJ/GLB/BLEND/USD/UASSET.
-Project WIP; forks and contributions welcome. 项目仍在完善，欢迎二次开发。
+## 跑起来
 
-## 快速开始
+装包最快。到 GitHub Releases 下 `UniversalSceneForge_1.0_Setup.exe`，装完直接开。
+不想装就用绿色版 `UniversalSceneForge_1.0_portable.zip`，解压运行 `UniversalSceneForge.exe`。
+下载完可以拿 `installer/SHA256SUMS.txt` 对一下哈希。
 
-### 方式一：Windows 安装包（推荐）
-
-从 GitHub Releases 下载 `UniversalSceneForge_0.9.9_Preview_Setup.exe`，安装后直接启动。
-绿色版下载 `UniversalSceneForge_0.9.9_Preview_portable.zip`，解压后运行 `UniversalSceneForge.exe`。
-发布资产校验见 `SHA256SUMS.txt`。
-
-### 方式二：源码运行
+从源码跑也行：
 
 ```bat
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-首次使用 3DGS 训练前，请按下方「训练环境」自行克隆 `external/gaussian-splatting`。
-Blender / COLMAP / FFmpeg 可在 GUI「依赖体检」中探测或安装。
+第一次打开建议先点「依赖体检」。Python 库、FFmpeg、COLMAP、Blender 路径、训练环境它都会扫一遍，
+缺什么会告诉你缺在哪、怎么补，也能一键装。3DGS 训练环境要单独准备，见文末「训练环境」。
 
-## 命令行 / CLI
+## 命令行
 
 ```bat
 python main.py --version
@@ -44,49 +34,61 @@ python main.py --check-deps
 python main.py --cli --input a.mp4 b/ --output D:/work
 ```
 
-退出码语义：`0` 全部成功；`1` 任意阶段失败；`2` 参数错误；`3` 输入源/环境阻断（未进入流水线）。
+退出码：0 全成功，1 有阶段失败，2 参数写错，3 还没进流水线就被环境或路径拦下了，
+130 是你按了 Ctrl+C。脚本里判断结果用退出码比抓日志靠谱。
 
-## 代码签名（Windows Authenticode，可选）
+`--check-deps` 在打包版里同样能用：双击启动没有控制台时，程序会自己开一个窗口；
+开不出来就把报告写到 `~/.universal_scene_forge/logs/`，并弹框告诉你路径。
 
-发布前可对主程序与安装包签名并校验：
+## 几个当时纠结的点
+
+**宿主集成为什么不接 SDK**：Blender、UE5、Metashape 各自绑定不同版本的 Python，
+接 SDK 等于要求用户机器上只有一个解释器，装了这个就用不了那个。现在的做法是起子进程、
+用中间文件交换，代价是每次导出多几秒启动和磁盘往返，换来的是某个宿主版本不对只影响它自己那一段。
+
+**网格默认 TSDF，泊松兜底**：一开始直接拿高斯中心做泊松，结果黑色鼠标这种高反光主体会被
+不透明度阈值滤掉，只剩下背景一层薄片。改成先用 3DGS 深度做 TSDF 融合、再拿原始影像投影贴色，
+表面才封闭得住。但 TSDF 要求位姿和训练环境都在，少一样就退回泊松——宁可外观差一点，也别整条流程失败。
+
+**模糊评分降采样到 1/4**：全尺寸解码 4K 帧太慢，而判定阈值本来就是取中位数的一个比例，
+相对排序不受影响。配上线程池之后，300 帧的评分从秒级掉到百毫秒级，前端等待感差别很明显。
+
+## 代码签名（可选）
+
+发布前给主程序和安装包签名：
 
 ```powershell
-# 干跑：确认目标与可用签名方式（无需证书）
+# 干跑，确认目标与可用签名方式，不需要证书
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\sign_windows.ps1 -DryRun
 
-# PFX 证书（密码交互输入）
+# PFX 证书，密码交互输入
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\sign_windows.ps1 -PfxPath D:\certs\usf-codesign.pfx
 
-# 证书存储指纹（EV 硬件令牌）
+# 证书存储指纹，适用于 EV 硬件令牌
 powershell -NoProfile -ExecutionPolicy Bypass -File installer\sign_windows.ps1 -Thumbprint <SHA1指纹>
 ```
 
-脚本优先使用 Windows SDK `signtool.exe`（SHA-256 + RFC3161 时间戳），
-未安装 SDK 时回退到 PowerShell `Set-AuthenticodeSignature`。
-ZIP 为压缩包，Authenticode 仅适用于 PE 文件（exe/dll）。
+优先用 Windows SDK 的 `signtool.exe`（SHA-256 + RFC3161 时间戳），没装 SDK 就退回
+PowerShell 的 `Set-AuthenticodeSignature`。ZIP 是压缩包，Authenticode 只认 PE 文件，别在 zip 上试。
 
-## 几个设计取舍
+## 许可
 
-写在这里的多半是踩过坑之后改的，不是一开始就这么设计。
+本仓库自有代码走 [MIT](LICENSE)，Copyright (c) 2026 CYM。
 
-- **宿主集成走子进程，不接 SDK**：Blender、UE5、Metashape 的 Python 版本互相打架，接 SDK 等于把用户机器上的所有宿主绑到同一个解释器。改成子进程加中间文件交换后，代价是每次导出多几秒启动与磁盘往返，收益是某个宿主没装、版本不对都只影响它自己那一段。
-- **网格重建默认 TSDF，泊松兜底**：泊松把高斯中心当点云，遇到半透明或高反光主体容易只剩背景薄片；TSDF 走深度融合，表面更封闭。但 TSDF 要求相机位姿与训练环境齐备，缺一项就自动退回泊松，宁可外观差一点也不要整条流程失败。
-- **模糊评分按 1/4 尺寸解码**：全尺寸解码 4K 帧要慢一个数量级，而判定阈值本来就是按中位数比例取的，相对排序不受影响。配合线程池后，300 帧的评分从秒级降到百毫秒级。
+第三方组件不在本仓库里，由用户自行获取，各自受自己的许可约束，清单见
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。要留意的有两个：
 
-## 开源许可 / License
+- **gaussian-splatting**（Inria/MPII）只允许研究、评估等非商业用途。本工具只用子进程调它，
+  不打包源码；商用之前先找 Inria 拿授权。
+- **COLMAP**（BSD-3-Clause）和 **FFmpeg**（gyan.dev 构建，GPLv3）由「依赖体检」从官方发布页下载。
+  Python 依赖（PySide6 为 LGPL-3.0 等）走 pip，见 `requirements.txt`。
 
-本仓库自有代码以 [MIT License](LICENSE) 发布（Copyright (c) 2026 CYM）。
+`plyfile`（GPL-3.0+）不是本工具的依赖，它只会出现在你自己克隆的 `external/gaussian-splatting`
+训练环境里，不随安装包分发。
 
-本仓库**不包含**以下第三方组件的代码，它们由最终用户自行获取并受其自身许可约束（详见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)）：
+## 训练环境
 
-- **gaussian-splatting**（Inria/MPII）：**仅限研究/评估等非商业用途**。本工具仅以子进程方式调用，不打包其源码；商用前须获得 Inria 授权。
-- **COLMAP**（BSD-3-Clause）、**FFmpeg**（gyan.dev 构建，GPLv3）：运行时由「依赖体检」从官方发布页下载。
-- Python 依赖（PySide6 为 LGPL-3.0 等）：经 pip 安装，清单见 [requirements.txt](requirements.txt)。
-  **plyfile（GPL-3.0+）不是 USF 的依赖**，仅可能出现在用户自建的 `external/gaussian-splatting` 训练环境中，不随本工具打包或分发。
-
-## 训练环境（gaussian-splatting）
-
-首次使用 3DGS 训练前，在本仓库 `external/` 下自行克隆官方仓库（含子模块）并创建独立 venv：
+3DGS 训练要单独准备环境，和 GUI 壳分开，免得 torch 版本冲突把整个程序拖垮：
 
 ```bat
 git clone https://github.com/graphdeco-inria/gaussian-splatting --recursive external/gaussian-splatting
@@ -97,8 +99,12 @@ pip install submodules/diff-gaussian-rasterization submodules/simple-knn
 pip install plyfile tqdm opencv-python joblib
 ```
 
-也可在 GUI 内通过「依赖体检」引导完成。克隆与使用 gaussian-splatting 即表示你接受其非商业研究许可条款。
-## 开发方式与质量记录
+GUI 的「依赖体检」也能引导你走完这套流程。克隆并使用即表示接受其非商业研究许可。
 
-- 本项目在开发中使用了 AI 编程助手，参与范围、人工控制措施与不涉及项见 [AI_ASSISTANCE.md](AI_ASSISTANCE.md)。
-- 1.0 定稿前的重构、缺陷修复与性能优化记录见 [docs/CODE_REVIEW_1.0.md](docs/CODE_REVIEW_1.0.md)。
+## 关于 AI 与质量记录
+
+这个项目在开发过程中用过 AI 编程助手，具体范围、人工把关方式和明确不涉及的部分写在
+[AI_ASSISTANCE.md](AI_ASSISTANCE.md) 里，没有藏着。
+
+1.0 定稿前做过一轮重构、缺陷修复和性能优化，每条都记了改动原因与验证方式，
+见 [docs/CODE_REVIEW_1.0.md](docs/CODE_REVIEW_1.0.md)。
