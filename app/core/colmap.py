@@ -1,14 +1,13 @@
 """COLMAP SfM 位姿求解封装。
 
-输出标准 3DGS 数据集布局:
-    dataset/images/          原始帧
-    dataset/sparse/0/        cameras.bin / images.bin / points3D.bin
+跑完把输出整理成 3DGS 训练能直接读的目录结构：dataset/images 放帧，dataset/sparse/0
+放 cameras.bin、images.bin、points3D.bin。
 
-职责: 调用 COLMAP 完成特征提取、匹配与稀疏重建，把输出整理成 3DGS 训练可直接读取的目录结构。
+调用上优先用发行包自带的 COLMAP.bat，它自己配好了 DLL 搜索路径；只有包装脚本不存在
+时才退回裸 exe。以前踩过「命令行能跑、程序里起不来」的坑，根子就在环境变量。
 
-取舍: 优先用发行包自带的 COLMAP.bat（它自己配好了 DLL 搜索路径），包装脚本缺失才回退裸 exe，避免出现「命令行能跑、程序里跑不起来」。
-
-限制: 弱纹理、纯旋转、大范围运动模糊的素材成功率低，程序只能报告失败与日志尾部，补拍得由用户决定。
+弱纹理、纯旋转、整体运动模糊的素材，稀疏重建经常失败。程序只能把日志尾部报出来，
+补不补拍得自己判断。
 """
 from __future__ import annotations
 

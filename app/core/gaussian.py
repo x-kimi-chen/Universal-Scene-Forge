@@ -1,14 +1,13 @@
 """3D Gaussian Splatting 训练封装。
 
-将官方 gaussian-splatting (graphdeco-inria) 仓库作为子进程驱动：
-    python train.py -s <dataset> -m <model> --iterations N
-训练环境（torch+CUDA）与 GUI 壳隔离（见 models/settings.gs_python）。
+以子进程驱动官方 gaussian-splatting，产出 point_cloud.ply，同时把训练进度、显存占用
+和失败原因回传给流水线。
 
-职责: 以子进程驱动官方 gaussian-splatting，产出 point_cloud.ply，并把训练进度、显存占用与失败原因回传给流水线。
+训练用独立解释器（settings.gs_python），不和 GUI 共用 venv。共用过一次，torch 版本
+一冲突整个程序都起不来；隔离之后训练崩了只影响这一段。
 
-取舍: 训练环境用独立解释器（settings.gs_python），不与 GUI 共用 venv。否则 torch/CUDA 一旦与壳冲突，整个程序都起不来；隔离后训练崩了只影响这一段。
-
-限制: 上游是非商业研究许可，声明商业用途时直接拒绝执行；本机没有训练环境时抛明确错误，由流水线决定回退到哪个网格后端。
+上游是非商业研究许可，声明商业用途时这里直接拒绝执行。本机没有训练环境时抛明确错误，
+由流水线决定退回哪个网格后端，不静默跳过。
 """
 from __future__ import annotations
 
