@@ -66,8 +66,8 @@
 **复现（已实测）**：
 
 ```powershell
-& 'd:\AI_MADE\MADE_one_kaiyuan_Github_Trea\universal_scene_forge\build\audit\venv\Scripts\python.exe' `
-  'd:\AI_MADE\MADE_one_kaiyuan_Github_Trea\universal_scene_forge\build\audit\security_selftest.py'
+& '<repo>\build\audit\venv\Scripts\python.exe' `
+  '<repo>\build\audit\security_selftest.py'
 ```
 
 实测输出（`build/audit/security_selftest.log:12-13`）：
@@ -286,7 +286,7 @@ FFmpeg (gyan.dev 构建) 采用 GPLv3。USF 不分发 FFmpeg 二进制, ...
 build/audit/e2e/cli_exit1_nocolmap.log:45
 23:36:53 [INFO   ] USF.3DGS: gs| No Python at '"C:\Users\<user>\AppData\Roaming\uv\...'
 build/audit/e2e/cli_exit1_nocolmap.log:51
-[ERROR] ... No Python at '"C:\Users\kimi\AppData\Roaming\uv\...'
+[ERROR] ... No Python at '"C:\Users\<user>\AppData\Roaming\uv\...'
 ```
 
 根因：`main.py` 的 EventBus 回调直接 `print`，绕过 logging Handler。修复位置：

@@ -162,7 +162,7 @@ blender| [USF] FATAL 网格为 0 面（仅点/边，无法导出实体网格）�
 
 ```powershell
 $env:PYTHONUNBUFFERED='1'
-& 'D:\AI_MADE\MADE_one_kaiyuan_Github_Trea\universal_scene_forge\build\audit\venv\Scripts\python.exe' `
+& '<repo>\build\audit\venv\Scripts\python.exe' `
   main.py --cli --input 'build\audit\e2e\input_frames' `
   --output 'build\audit\e2e\work_final2' `
   --model 'build\audit\e2e\model\point_cloud\iteration_7000\point_cloud.ply' `
@@ -229,7 +229,7 @@ Blender 命令与关键日志（`cli_stdout_final2.log:61,186`）：
 2. **Metashape 未执行**：本机未安装且无授权，流水线记录 `[SKIP] Metashape 洞穴修复 跳过: 未启用 Metashape 洞穴修复`（`cli_stdout_final2.log:190`）。不 mock、不绕过许可证。
 3. **gltf-validator 未使用**：`npx gltf-validator` 被本机 PowerShell 执行策略阻止；改用 Blender `bpy.ops.import_scene.gltf` 再导入校验（同等验证“可被消费端读取”）。未实测项，原因记录于此。
 4. **非流形网格**：E2E 网格有 663 条非流形边，Blender 脚本告警后继续导出（`cli_stdout_final2.log:70,78`），导出文件仍可再导入；属设计取舍（L-03）。
-5. **Blender 缩略图缓存写入用户目录**：`cli_stdout_final2.log:165` 出现 `OpenImageIO write failed ... C:\Users\kimi\.thumbnails\...`，这是 Blender 保存 .blend 时尝试写文件预览图，失败不影响 .blend 产物（同轮 `[CHECK] OK`）。后台任务在沙箱下会因此被拦截，故本报告采用前台实测。
+5. **Blender 缩略图缓存写入用户目录**：`cli_stdout_final2.log:165` 出现 `OpenImageIO write failed ... C:\Users\<user>\.thumbnails\...`，这是 Blender 保存 .blend 时尝试写文件预览图，失败不影响 .blend 产物（同轮 `[CHECK] OK`）。后台任务在沙箱下会因此被拦截，故本报告采用前台实测。
 6. **纹理烘焙**：默认 2048×2048，E2E 单次约 1 秒级；更大分辨率未测。
 7. **耗时**：Blender 后处理 1.6–1.8s（夹具规模），不代表大场景性能。
 8. **EXE 内 open3d 不打包**：按既有体积设计，open3d（MIT，约 230MB）不进入安装包，由「依赖体检」补装到 `~/.universal_scene_forge/python_pkgs`。本次 EXE 实测即使用该补装路径；未补装时 MESH 阶段会给出可读错误（`app/core/mesh.py:71-74`），不会崩溃。

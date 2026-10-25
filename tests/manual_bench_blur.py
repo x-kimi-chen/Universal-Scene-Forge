@@ -9,8 +9,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-SRC = r"D:/AI_MADE/MADE_one_kaiyuan_Github_Trea/universal_scene_forge"
-sys.path.insert(0, SRC)
+SRC = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SRC))
 
 from app.core.ingest import Ingester  # noqa: E402
 
