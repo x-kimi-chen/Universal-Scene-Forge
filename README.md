@@ -65,6 +65,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File installer\sign_windows.ps1 -
 未安装 SDK 时回退到 PowerShell `Set-AuthenticodeSignature`。
 ZIP 为压缩包，Authenticode 仅适用于 PE 文件（exe/dll）。
 
+## 几个设计取舍
+
+写在这里的多半是踩过坑之后改的，不是一开始就这么设计。
+
+- **宿主集成走子进程，不接 SDK**：Blender、UE5、Metashape 的 Python 版本互相打架，接 SDK 等于把用户机器上的所有宿主绑到同一个解释器。改成子进程加中间文件交换后，代价是每次导出多几秒启动与磁盘往返，收益是某个宿主没装、版本不对都只影响它自己那一段。
+- **网格重建默认 TSDF，泊松兜底**：泊松把高斯中心当点云，遇到半透明或高反光主体容易只剩背景薄片；TSDF 走深度融合，表面更封闭。但 TSDF 要求相机位姿与训练环境齐备，缺一项就自动退回泊松，宁可外观差一点也不要整条流程失败。
+- **模糊评分按 1/4 尺寸解码**：全尺寸解码 4K 帧要慢一个数量级，而判定阈值本来就是按中位数比例取的，相对排序不受影响。配合线程池后，300 帧的评分从秒级降到百毫秒级。
+
 ## 开源许可 / License
 
 本仓库自有代码以 [MIT License](LICENSE) 发布（Copyright (c) 2026 CYM）。
