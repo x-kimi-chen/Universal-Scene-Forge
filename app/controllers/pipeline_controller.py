@@ -57,12 +57,12 @@ class StageSkipped(RuntimeError):
 class EventBus(QObject):
     """控制器 → 视图 的唯一通信通道（跨线程自动队列）。"""
     stage = Signal(str)                 # 阶段名
-    stage_failed = Signal(str)          # 阶段名（该阶段失败被跳过）
-    stage_skipped = Signal(str)          # 阶段名（该阶段主动跳过, 非失败）
-    progress = Signal(int, str)         # 总进度 0-100 + 消息
+    stage_failed = Signal(str)          # 阶段名，这个阶段失败被跳过了
+    stage_skipped = Signal(str)          # 阶段名，主动跳过的，不算失败
+    progress = Signal(int, str)         # 总进度 0-100，带一句消息
     dcc = Signal(str, str)              # (key, state: ok|busy|error|off|skipped)
     log_line = Signal(str, str)         # (level, message)
-    artifact = Signal(str)              # 产物路径
+    artifact = Signal(str)              # 产物路径列表
     preview = Signal(str)               # 缩略图目录
     finished = Signal(bool, str)        # (成功?, 总结)
 
@@ -75,8 +75,8 @@ class PipelineController:
         self.bus = bus
         self.state = ProjectState()
         self.stop_event = stop_event or threading.Event()
-        # CLI/GUI 共用一套三级探测(B-04): 显式路径设置(settings.<tool>_exe)
-        # 必须同样对 CLI 生效, 否则同一台机器两边探测结果不一致。
+        # 探测只有一套逻辑，CLI 和 GUI 共用（B-04）
+        # settings 里手填的路径对命令行同样生效，不然同一台机器能问出两个答案
         self.dcc_infos = dcc_infos or DccDetector(
             {key: getattr(settings, field, None)
              for key, _name, field in DCC_PATH_FIELDS}).detect_all()
@@ -105,9 +105,9 @@ class PipelineController:
             sources: List[Path] = [Path(source)]
         else:
             sources = [Path(s) for s in source]
-        # M-01: 输入/输出统一规范化（符号链接解析 + 存在性 + 输出根边界）。
-        # 校验失败不向上抛: 与 INGEST 阶段失败同语义留档(1 条失败 + 其余
-        # "未执行"), 返回 False, 避免 GUI 线程直接崩溃且口径与 CLI 一致。
+        # M-01：输入输出先规范化（解符号链接、查存在、查输出根边界）
+        # 校验不过不往上抛，按 INGEST 失败那套记档：一条失败，其余标"未执行"
+        # 返回 False 就够了，GUI 线程不能因为一个坏路径崩，命令行也是这个口径
         try:
             sources = [normalize_input(s) for s in sources]
             work_dir = ensure_output_dir(work_dir)
@@ -140,8 +140,8 @@ class PipelineController:
             self._check_stop()
             self._safe(name, fn)
             if idx == 0 and self.failed_stages:
-                # INGEST 失败: 后续 7 个阶段全部依赖帧数据, 级联执行只会产生
-                # 一串误导性的连锁失败。提前终止并留档(C-04)。
+                # 采集一挂，后面七段全废，因为它们都吃帧数据
+                # 硬跑下去只会刷一串连锁失败，看着吓人又没用，不如早点停、记一笔（C-04）
                 for skip_name, _fn in stages[idx + 1:]:
                     self.state.record(skip_name, None, 0.0, skipped=True,
                                       message="采集阶段失败, 未执行")
@@ -206,7 +206,7 @@ class PipelineController:
         frames = ing.collect_multi(
             sources, frames_dir, self.settings.frame_fps,
             self.settings.max_frames)
-        frames = ing.filter_blurry(frames)   # 剔除失焦/运动模糊帧
+        frames = ing.filter_blurry(frames)   # 把失焦和运动模糊的帧挑出去
         if getattr(self.settings, "enable_subject_mask", False):
             from app.core.masking import SubjectMasker, rembg_available
             if rembg_available():
@@ -239,8 +239,8 @@ class PipelineController:
         if self._model_path:
             raise StageSkipped(
                 f"已通过外部点云跳过 SfM: {self._model_path.name}")
-        # GPU 加速仅 NVIDIA (COLMAP CUDA SIFT 限制): AMD/Intel/核显自动回退
-        # CPU SIFT, 功能完整仅速度差异(BUG-011 厂商适配)。
+        # CUDA 这条路只认 NVIDIA，COLMAP 的 CUDA SIFT 就这限制
+        # AMD、Intel、核显一律回 CPU，功能不缺，就是慢（BUG-011）
         use_gpu = self.settings.enable_cuda_accel
         if use_gpu:
             from app.utils.gpu import probe
@@ -284,15 +284,15 @@ class PipelineController:
 
     def _train(self, work_dir: Path) -> Path:
         if self._model_path:
-            # 外部点云: 不执行 gaussian-splatting（Inria 非商业组件）, 直接登记
+            # 用户自带点云就跳过 gaussian-splatting（Inria 那套不能随便跑），直接登记
             self.state.register(Stage.TRAIN.value, [self._model_path])
             self.bus.log_line.emit(
                 "INFO", f"使用外部点云, 跳过 3DGS 训练: {self._model_path.name}")
             log.info("[LICENSE] 外部点云路径不执行 gaussian-splatting: %s",
                      self._model_path)
             raise StageSkipped("使用 --model 注入点云, 未执行 3DGS 训练")
-        # 训练器抽象 (0.9.6): settings.trainer 选择引擎, 不可用回退内置
-        # (内置引擎内部保留 B-01 训练解释器守卫与 CUDA 加速逻辑)
+        # 引擎按 settings.trainer 选（0.9.6 加的抽象），选中的不可用就回内置
+        # 内置那条分支里还有 B-01 的解释器守卫和 CUDA 加速，别绕过
         busy = self._check_gpu_busy()
         if busy:
             self.bus.log_line.emit(
@@ -309,8 +309,8 @@ class PipelineController:
                            self.settings.gs_iterations)
         self.state.register(Stage.TRAIN.value, [ply])
 
-        # M1.5 主体高斯过滤 (0.9.6): 有遮罩时投影采样剔除背景高斯,
-        # 网格重建聚焦主体 (修复 Q-01 主体缺失)。
+        # M1.5 高斯过滤（0.9.6）：有遮罩就拿去投影采样，把背景高斯剔掉
+        # 网格只围着主体长，Q-01 那个主体缺失就是这么修的
         if getattr(self.state, "masks", None):
             try:
                 from app.core.gaussian_filter import filter_gaussians_by_masks
@@ -331,8 +331,8 @@ class PipelineController:
         ply = self.state.artifacts.get(Stage.TRAIN.value, [None])[0]
         if not ply:
             raise RuntimeError("无点云可重建（TRAIN 阶段未产出高斯模型）")
-        # TSDF 优先: 泊松重建把半透明高光主体（黑色鼠标）当噪声, 容易
-        # 只剩背景薄片。深度图融合能得到完整表面; 缺相机/环境时自动回退。
+        # 默认 TSDF。泊松那条路遇到半透明或高光主体（说的就是黑鼠标）会当噪声扔掉
+        # 最后只剩背景一层薄片；深度图融合能把表面接起来。相机或环境缺了就退回去
         if getattr(self.settings, "enable_tsdf", True):
             try:
                 from app.core.tsdf import build_mesh_from_depth
@@ -361,8 +361,8 @@ class PipelineController:
             except Exception as exc:  # noqa: BLE001 —— TSDF 失败不阻断
                 self.bus.log_line.emit(
                     "WARNING", f"TSDF 网格不可用, 回退泊松重建: {exc}")
-        # Q-02 自适应细节: 高斯数量大时自动加深泊松八叉树 (面数约 4x/级),
-        # 上限 +2 级防止显存/内存失控
+        # Q-02：高斯多的时候把泊松八叉树加深，每深一级面数差不多翻四倍
+        # 但只允许加两级，再往上内存就顶不住（emm，两级是试出来的）
         depth = self.settings.poisson_depth
         try:
             from app.utils.ply_io import PlyData
@@ -399,7 +399,7 @@ class PipelineController:
         """
         meshes = [Path(f) for f in self.state.artifacts.get(Stage.MESH.value, [])]
         if meshes:
-            # RizomUV 展过 UV 的网格优先: UV/贴图质量优于 Blender 兜底智能UV
+            # 展过 UV 的优先用 RizomUV 那份，比 Blender 的智能 UV 强不少
             uv_meshes = [Path(f) for f in
                          self.state.artifacts.get(Stage.RIZOMUV.value, [])]
             if uv_meshes:
@@ -422,7 +422,7 @@ class PipelineController:
         if not self.settings.enable_rizomuv:
             self.bus.dcc.emit("rizomuv", "skipped")
             raise StageSkipped("未启用 RizomUV 自动展 UV")
-        # 3.4 许可证检测桩: 只认用户自备授权, 检测不到即跳过（不绕过/不模拟）
+        # 3.4 授权检测只做存在性判断：找不到就跳过，不去绕也不去模拟
         try:
             licensing.require_optional_license("rizomuv")
         except licensing.LicenseBlocked as exc:
@@ -465,8 +465,8 @@ class PipelineController:
         uproject = self.settings.ue5_uproject or find_ue5_uproject(
             info.exe, [str(Path(self.settings.gs_repo).parent)])
         if not uproject:
-            # 环节可用化: 没有 .uproject 时自动生成最小预览工程(含
-            # PythonScriptPlugin), 首次打开 UE 需编译/着色器, 可能耗时较长。
+            # 没 .uproject 就现场生成一个最小工程，带上 PythonScriptPlugin
+            # 头一次打开 UE 要编译、跑着色器，慢是正常的，别当卡死
             from app.dcc.ue5_bridge import ensure_preview_uproject
             uproject = ensure_preview_uproject(info.exe, work_dir)
             if uproject:
@@ -518,7 +518,7 @@ class PipelineController:
         return files
 
     def _metashape_repair(self, work_dir: Path) -> Optional[List[Path]]:
-        self._repair_attempted = True   # 供 _export 兜底判断, 避免重复跑修复
+        self._repair_attempted = True   # 给 _export 兜底用，免得同一轮修复跑两遍
         if not self.settings.enable_metashape_repair:
             self.bus.dcc.emit("metashape", "skipped")
             raise StageSkipped("未启用 Metashape 洞穴修复")
@@ -547,9 +547,9 @@ class PipelineController:
     def _export(self, work_dir: Path) -> dict:
         mesh_files = self._best_meshes()
 
-        # 最后兜底(C-08): 到导出为止仍无任何网格, 且 Metashape 可用却尚未
-        # 尝试过修复(被关闭/未触发)时, 自动跑一次摄影测量修复 —— 保证项目
-        # 能交付出完整模型, 而不是交白卷。
+        # 最后一道兜底（C-08）：走到导出了还一个网格都没有
+        # 而 Metashape 明明能用、只是没触发过修复，那就自动跑一次
+        # 宁可多花十分钟，也别让人拿着空目录回去
         if not mesh_files and not getattr(self, "_repair_attempted", False):
             info = self.dcc_infos.get("metashape")
             licensed = licensing.detect_optional_license("metashape")[0]
@@ -572,12 +572,12 @@ class PipelineController:
                 "无网格可导出（3DGS 网格、Metashape 修复网格均缺失; "
                 "请检查训练/网格阶段日志, 或在依赖体检中补装 open3d）")
 
-        # 导出位置(C-09): 用户设置的导出目录优先, 否则工作目录下 output/
+        # 导出位置（C-09）：用户设了就用，没设就放工作目录的 output/
         if self.settings.export_dir:
             out_dir = Path(self.settings.export_dir)
         else:
             out_dir = work_dir / "output"
-        # M-02: 导出目录边界（拒绝盘符根/系统目录, 探测可写性）
+        # 导出目录先过边界（M-02）：盘符根和系统目录直接拒，再试写一下
         try:
             out_dir = ensure_output_dir(out_dir)
         except PathSecurityError as exc:
@@ -628,8 +628,8 @@ class PipelineController:
                                       max_bridge=maxb, maya_bridge=mayab,
                                       houdini_bridge=houdinib, c4d_bridge=c4db,
                                       modo_bridge=modob)
-        # FBX 与 .blend 是硬性交付要求: 即使设置里漏勾/旧配置未包含,
-        # 也强制加入导出列表; 二者由 Blender 权威导出（FBX 另有 DCC 兜底）。
+        # FBX 和 .blend 是硬要求，设置里漏勾、老配置里没有，都照样补上
+        # 这两个以 Blender 导出的为准，FBX 还有 DCC 那条兜底链
         formats = list(dict.fromkeys([*self.settings.export_formats,
                                       "fbx", "blend"]))
         added = [f for f in ("fbx", "blend")
@@ -643,7 +643,7 @@ class PipelineController:
             bake_ao=self.settings.bake_ao,
             texture_size=getattr(self.settings, "texture_size", 4096))
         flat = [f for files in results.values() for f in files
-                if Path(f).exists()]   # 只登记真实落盘的产物
+                if Path(f).exists()]   # 只记真落盘的东西，嘴上说成功不算
         missing_required = [f for f in ("fbx", "blend")
                             if not results.get(f)]
         if missing_required:
@@ -651,8 +651,8 @@ class PipelineController:
                 "必需格式导出缺失: " + ", ".join(missing_required)
                 + "（请确认 Blender 可用且未在导出阶段报错）")
 
-        # 高斯泼溅场景交付: 训练产出的 splat PLY 复制到导出目录,
-        # 可直接拖入 SuperSplat / PlayCanvas / Luma 等查看器查看编辑
+        # 顺手把训练出的 splat PLY 拷一份到导出目录
+        # SuperSplat、PlayCanvas、Luma 这些查看器直接能拖进去看
         try:
             splat_src = next((Path(f) for f in
                               self.state.artifacts.get(
@@ -691,7 +691,7 @@ class PipelineController:
                               message="用户取消")
             self.bus.finished.emit(False, "已取消")
             raise
-        except StageSkipped as skip:   # 主动跳过(P4): 留档但不计失败
+        except StageSkipped as skip:   # 主动跳过（P4）：记一笔，但不进失败清单
             self.state.record(stage_name, None, time.time() - t0,
                               skipped=True, message=str(skip))
             log.info("[SKIP] %s 跳过: %s", stage_name, skip)

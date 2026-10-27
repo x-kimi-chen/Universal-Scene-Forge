@@ -29,7 +29,7 @@ log = get_logger("3DGS")
 
 ProgressCb = Callable[[int, int, str], None]   # (iter, total, msg)
 
-# tqdm 风格进度行: "1200/30000" 或 "[ITER 12000]"
+# 进度行长这样："1200/30000"，或者 tqdm 那种 "[ITER 12000]"
 _ITER_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 
 
@@ -87,8 +87,8 @@ class GaussianEngine:
     # ------------------------------------------------------------------ #
     def train(self, dataset_dir: Path, model_dir: Path,
               iterations: int = 30_000) -> Path:
-        # 合规硬门（LICENSE_COMPLIANCE_CHANGES.md 3.1）:
-        # 商用声明 → LicenseBlocked; 未确认非商业条款 → 拒绝执行。
+        # 许可这道门必须走（LICENSE_COMPLIANCE_CHANGES.md 3.1）
+        # 声明商用直接 LicenseBlocked；没确认非商业条款也别想跑
         """启动一次训练：dataset_dir 为数据集根，model_dir 为输出目录，iterations 为迭代数。"""
         licensing.require_3dgs_license(context="gaussian-splatting 训练")
         train_py = self.repo / "train.py"
@@ -99,8 +99,8 @@ class GaussianEngine:
                 f"--recursive {self.repo}\n"
                 f"并在其中创建训练环境（README「训练环境」一节）")
         model_dir.mkdir(parents=True, exist_ok=True)
-        # 子进程 cwd=仓库目录, 数据集/模型路径必须转绝对路径, 否则 train.py
-        # 在仓库下找不到 sparse/ 而报 "Could not recognize scene type!"。
+        # cwd 是训练仓库，所以数据集和模型都得给绝对路径
+        # 给相对路径的话 train.py 在仓库里找不到 sparse/，会直接抛下面这句
         dataset_dir = Path(dataset_dir).resolve()
         model_dir = Path(model_dir).resolve()
         cmd = [
@@ -108,14 +108,14 @@ class GaussianEngine:
             "-s", str(dataset_dir),
             "-m", str(model_dir),
             "--iterations", str(iterations),
-            # train.py 无头启动仍会绑定 GUI 监听端口(默认 6006 固定值):
-            # 并行两个重建 / 残留训练进程时会 WinError 10048 端口冲突直接崩。
-            # 每次分配随机空闲端口根治。
+            # 坑在这儿：train.py 就算无头跑，也会去绑 GUI 那个监听端口，默认写死 6006
+            # 同时开两个重建，或者上次的进程没退干净，就等着看 WinError 10048 吧
+            # 索性每次要一个空闲端口，用完就完
             "--port", str(_free_tcp_port()),
         ]
-        # 渲染效率(实测 2500 迭代 +8.7%): data_device=cuda 将图像常驻显存,
-        # 免去每次迭代的 H2D 拷贝。帧数过多时显存压力大(约 4MB/帧@1280x720),
-        # 超过 250 帧自动回退默认 cpu, 防止 OOM。
+        # data_device=cuda 让图常驻显存，省掉每次迭代的 H2D 拷贝
+        # 2500 迭代实测快了 8.7%，不算多，但是白拿的
+        # 代价在显存：1280x720 一帧约 4 MB，帧一多就 OOM，所以过 250 帧回默认
         if self.cuda_accel:
             imgs = dataset_dir / "images"
             n = sum(1 for p in imgs.iterdir() if p.is_file()) \
@@ -123,8 +123,8 @@ class GaussianEngine:
             if 0 < n <= 250:
                 cmd += ["--data_device", "cuda"]
                 log.info("CUDA 加速: data_device=cuda (帧数 %d)", n)
-        # 环境隔离: 剥离 PYTHONPATH/PYTHONHOME/PYTHONSTARTUP, PATH 收缩到
-        # 解释器目录 + System32/Windows, 防止外部同名 DLL/exe 劫持（H-01）。
+        # 环境隔离（H-01）：PYTHONPATH / PYTHONHOME / PYTHONSTARTUP 全摘掉
+        # PATH 只留解释器目录和 System32、Windows，免得同名 DLL 或 exe 插一脚
         env = scrubbed_env(
             python_exe=self.python,
             extra={"CUDA_VISIBLE_DEVICES":
@@ -140,7 +140,7 @@ class GaussianEngine:
         last_report = 0.0
         deadline = (time.monotonic() + self.timeout_s
                     if self.timeout_s else None)
-        tail: List[str] = []          # 输出尾部快照: 失败时随异常带出, 便于定位
+        tail: List[str] = []          # 留个输出尾巴，失败时跟着异常一起抛，不然只剩一个退出码
         try:
             for line in proc.stdout or []:
                 text = line.rstrip()

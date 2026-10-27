@@ -43,18 +43,18 @@ class TrainingEngine(Protocol):
     """训练引擎协议: 与 GaussianEngine.train 对齐的最小接口。"""
 
     def train(self, dataset_dir: Path, model_dir: Path,
-              iterations: int) -> Path:    # 返回 point cloud 路径
+              iterations: int) -> Path:    # 返回点云路径
         ...
 
 
 # --------------------------------------------------------------------- #
-# 内置 3DGS (gaussian-splatting) —— 委托现有实现, 零行为变化
+# 内置就是 gaussian-splatting，直接转过去，行为一点没动
 # --------------------------------------------------------------------- #
 class Builtin3dgsAdapter:
     name = "gaussian-splatting (内置)"
 
     def __init__(self, settings, progress_cb=None, stop_event=None):
-        from app.core.gaussian import GaussianEngine   # 延迟: 避免循环导入
+        from app.core.gaussian import GaussianEngine   # 放函数里 import，绕开循环引用
         python_exe = None
         from app.utils import deps
         py = deps.training_python(settings)
@@ -79,7 +79,7 @@ class Builtin3dgsAdapter:
 
 
 # --------------------------------------------------------------------- #
-# OpenSplat —— 单二进制开源引擎 (骨架: 检测 + 命令构建)
+# OpenSplat：单个二进制的开源引擎，这里只管检测和拼命令
 # --------------------------------------------------------------------- #
 class OpenSplatAdapter:
     name = "OpenSplat"
@@ -93,8 +93,8 @@ class OpenSplatAdapter:
 
     @staticmethod
     def detect(settings) -> EngineInfo:
-        # 官方 Releases 无 Windows 预编译版 (已实测扫描), 约定检测:
-        # settings.opensplat_exe → D:/OpenSplat/opensplat.exe (用户指定目录) → PATH
+        # 官方 Releases 里没有 Windows 版，翻过一遍确认了，所以只能按约定找
+        # 先看 settings.opensplat_exe，再看 D:/OpenSplat/opensplat.exe，最后 PATH
         cands = []
         exe_setting = getattr(settings, "opensplat_exe", None)
         if exe_setting:
@@ -153,9 +153,9 @@ class OpenSplatAdapter:
 
 
 # --------------------------------------------------------------------- #
-# nerfstudio splatfacto —— 骨架 (独立环境, 需用户确认后安装)
+# nerfstudio 的 splatfacto，先留个架子，独立环境，装不装用户说了算
 # --------------------------------------------------------------------- #
-NS_ROOT = Path("D:/nerfstudio")   # 用户指定安装目录
+NS_ROOT = Path("D:/nerfstudio")   # 装在哪儿由用户指定
 
 
 class NerfstudioAdapter:
@@ -210,8 +210,8 @@ class NerfstudioAdapter:
         target_step = max(iterations - 1, 1)
 
         bat = out_dir / f"usf_ns_train_{ts}.bat"
-        # 批处理拼接安全（H-04）: 所有插入 .bat 的路径先做元字符校验,
-        # 再以双引号包裹, 防止路径中的 & | < > ^ % 改变命令语义。
+        # 拼 .bat 有讲究（H-04）：路径先查元字符，再用双引号裹上
+        # & | < > ^ % 这几个在批处理里都有含义，路径里带一个就能把命令拆坏
         from app.utils.security import PathSecurityError, bat_quote
         try:
             for p in (venv_scripts, self._ns_train_exe(), ns_data_dir.parent,
@@ -248,8 +248,8 @@ class NerfstudioAdapter:
                 if self.log_cb:
                     self.log_cb(text[:300])
                 if ckpt.exists():
-                    time.sleep(5)          # 等待 checkpoint 写盘完成
-                    proc.kill()            # 训练完成, viewer 会阻塞进程
+                    time.sleep(5)          # 等 checkpoint 落盘
+                    proc.kill()            # 训完 viewer 会占着进程不退出，得处理一下
                     break
                 if self.stop_event.is_set() or time.time() > deadline:
                     proc.kill()
@@ -264,11 +264,11 @@ class NerfstudioAdapter:
                 f"nerfstudio 训练未产出 checkpoint ({ckpt}), "
                 "详见上方引擎输出")
 
-        # ns-export: checkpoint → PLY (供网格重建阶段使用)
+        # ns-export 把 checkpoint 转成 PLY，给网格那一步用
         ply_out = Path(model_dir).resolve() / "nerfstudio_splat.ply"
         ply_out.parent.mkdir(parents=True, exist_ok=True)
-        # ns-export 经包装脚本执行: torch 2.6+ weights_only 默认拒绝
-        # checkpoint 中的 numpy 对象, 包装器恢复默认 (可信来源=自产 checkpoint)
+        # ns-export 得套一层包装脚本：torch 2.6 之后 weights_only 默认 True
+        # 会把 checkpoint 里的 numpy 对象拒掉，包装器把它调回来；前提是自产文件
         wrapper = NS_ROOT / "ns_export_safe.py"
         log.info("导出 PLY: %s", ply_out)
         exp = subprocess.run(
@@ -286,7 +286,7 @@ class NerfstudioAdapter:
 
 
 # --------------------------------------------------------------------- #
-# 注册表
+# 引擎注册表
 # --------------------------------------------------------------------- #
 class PostshotAdapter:
     """Jawset Postshot CLI 适配骨架 (专有软件, 需用户自装并授权)。
@@ -361,7 +361,7 @@ def create_engine(settings, progress_cb=None, stop_event=None,
                     key, info.detail)
         cls = Builtin3dgsAdapter
     if cls is Builtin3dgsAdapter:
-        # 回退也不得绕过 Inria 非商业许可门（3.1）
+        # 就算是回退路径，Inria 那个非商业许可门也照过不误（3.1）
         licensing.require_3dgs_license(
             settings, context=f"训练器 {key} → builtin 回退")
     import inspect

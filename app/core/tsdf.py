@@ -214,8 +214,8 @@ def build_mesh_from_depth(ply_path: Path, model_dir: Path, dataset_dir: Path,
         if not views:
             raise TsdfError("深度渲染未产出视角")
 
-        # 场景尺度自适应体素: 取若干帧有效深度中位数 / 240
-        # （实测 0.025-0.03 能在鼠标曲面细节与噪声之间取得平衡）
+        # 体素跟着场景走：取几帧有效深度的中位数，除以 240
+        # 试下来 0.025-0.03 这段比较稳，再细就全是噪声
         meds = []
         maxes = []
         for v in views[::max(1, len(views) // 8)]:
@@ -226,12 +226,12 @@ def build_mesh_from_depth(ply_path: Path, model_dir: Path, dataset_dir: Path,
                 maxes.append(float(np.quantile(vals, 0.999)))
         med_depth = float(np.median(meds)) if meds else 5.0
         max_depth = float(np.max(maxes)) if maxes else med_depth * 2
-        # Open3D 各版本对 float 深度图支持不一致（0.20 会静默融合为空）；
-        # 统一转 uint16 毫米图，depth_scale 按场景尺度自适应。
+        # float 深度图在各版本 Open3D 上表现不一，0.20 会闷声融合出一个空网格
+        # 干脆统一转 uint16 毫米图，depth_scale 按场景自己算
         depth_unit = 60000.0 / max(max_depth, 1e-6)
         voxel = float(np.clip(med_depth / 240.0, 0.008, 0.2))
-        # 3.5x 截断可闭合鼠标与垫子接触处的薄缝（白色孔洞），
-        # 2 次 Taubin 平滑去掉融合噪声，再减面到目标面数。
+        # 截断取 3.5 倍体素，正好把鼠标和垫子接触那道薄缝合上（不然是个白洞）
+        # 然后 Taubin 抹两遍压掉融合毛刺，最后减到目标面数
         trunc = 3.5 * voxel
         _emit(log_cb, f"TSDF 体素 {voxel:.3f} (中位深度 {med_depth:.2f}), "
                       f"截断 {trunc:.3f}")
@@ -265,7 +265,7 @@ def build_mesh_from_depth(ply_path: Path, model_dir: Path, dataset_dir: Path,
         mesh = volume.extract_triangle_mesh()
         mesh.compute_vertex_normals()
         if len(mesh.triangles) == 0:
-            # Open3D 0.20 的 ScalableTSDFVolume 实测会静默返回空网格
+            # 0.20 的 ScalableTSDFVolume 有时啥也不说就返回空网格，只能换 Uniform 再来一遍
             _emit(log_cb, "ScalableTSDF 空结果, 回退 UniformTSDFVolume")
             bbox = _ply_bbox(ply_path)
             if bbox is not None:

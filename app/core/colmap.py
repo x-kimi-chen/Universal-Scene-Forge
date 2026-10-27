@@ -27,7 +27,7 @@ log = get_logger("SFM")
 
 ProgressCb = Callable[[int, int, str], None]
 
-# 单个 COLMAP 步骤墙钟上限（H-01）: 特征提取/匹配/重建都可能因畸形输入卡死
+# 单个 COLMAP 步骤的墙钟上限（H-01），畸形数据能把三步里任何一步卡死
 SFM_STEP_TIMEOUT_S = 14_400
 
 
@@ -41,9 +41,9 @@ class SfmRunner:
                  stop_event: Optional[threading.Event] = None,
                  use_gpu: bool = True,
                  tools_root: Optional[str] = None):
-        # 三级查找(P1): settings 显式路径 → PATH → tools_root 便携版,
-        # 与 deps.check_tools / Ingester(FFmpeg) 完全同口径 —— 否则体检
-        # 显示 [OK] 而流水线实际报「COLMAP 未安装」。
+        # 三级查找（P1）：settings 写了就用 → 再看 PATH → 最后 tools_root 便携版
+        # 顺序必须跟 deps.check_tools、Ingester 那边一致
+        # 对不上就会出现体检打 [OK]、跑起来却说「COLMAP 未安装」，很难跟用户解释
         self.colmap = resolve_executable(colmap_exe) or \
             resolve_executable(shutil.which("colmap"))
         if not self.colmap and tools_root:
@@ -63,7 +63,7 @@ class SfmRunner:
                 out = subprocess.run(
                     [self.colmap, "-h"], capture_output=True, text=True,
                     timeout=30, errors="replace",
-                    env=scrubbed_env(),           # 剥离 PYTHONPATH, 收缩 PATH
+                    env=scrubbed_env(),           # PYTHONPATH 摘掉，PATH 收窄
                     creationflags=subprocess.CREATE_NO_WINDOW
                     if sys.platform == "win32" else 0)
                 m = re.search(r"COLMAP\s+(\d+)\.(\d+)", out.stdout)
@@ -90,7 +90,7 @@ class SfmRunner:
         dataset = work_dir / "dataset"
         images_dir = dataset / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
-        for f in frames:  # 平坦拷贝，规避中文/空格路径问题
+        for f in frames:  # 平铺拷过去，图省事，也避开中文和空格路径
             dst = images_dir / f.name
             if not dst.exists():
                 dst.write_bytes(f.read_bytes())
@@ -104,9 +104,9 @@ class SfmRunner:
                 "feature_extractor",
                 "--database_path", str(db), "--image_path", str(images_dir),
                 "--ImageReader.single_camera", "1",
-                # PINHOLE(P2): COLMAP 默认输出 SIMPLE_RADIAL, 而
-                # gaussian-splatting 仅接受 PINHOLE/SIMPLE_PINHOLE,
-                # 否则训练阶段必然报 "Colmap camera model not handled"。
+                # 相机模型固定 PINHOLE（P2）。COLMAP 默认吐 SIMPLE_RADIAL
+                # 可训练那边只认 PINHOLE / SIMPLE_PINHOLE
+                # 不对齐的话，训练一上来就是 "Colmap camera model not handled"
                 "--ImageReader.camera_model", "PINHOLE",
                 self._gpu_flags()["fe"], str(int(self.use_gpu)),
             ]),
@@ -131,9 +131,9 @@ class SfmRunner:
             self._run(cmd)
         self._report(total, total, "SfM 完成")
 
-        # mapper 输出目录为 sparse/0（单模型）
+        # 单模型的时候 mapper 落在 sparse/0
         if not (sparse / "cameras.bin").exists():
-            # 容错：有的版本直接写 sparse/
+            # 但有的版本就是写 sparse/，所以下面还得挪一次
             alt = dataset / "sparse"
             if (alt / "cameras.bin").exists():
                 (alt / "cameras.bin").rename(sparse / "cameras.bin")
@@ -147,8 +147,8 @@ class SfmRunner:
 
     # ------------------------------------------------------------------ #
     def _run(self, cmd: List[str]) -> None:
-        # H-01: 完整命令行写入日志（脱敏由 logger.RedactionFilter 负责）,
-        # 环境隔离 + 墙钟超时; 超时 kill 并抛 SfmError, 避免流水线永久挂起。
+        # H-01：命令行原样进日志（脱敏交给 logger.RedactionFilter）
+        # 跑的时候环境隔离，加个定时看表，超时就 kill，抛 SfmError
         log.info("COLMAP 命令: %s", subprocess.list2cmdline(cmd))
         started = time.monotonic()
         proc = subprocess.Popen(
@@ -156,7 +156,7 @@ class SfmRunner:
             text=True, encoding="utf-8", errors="replace",
             env=scrubbed_env(),
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
-        tail: List[str] = []   # 输出尾部: 失败时随异常带出, 否则用户只看到退出码
+        tail: List[str] = []   # 尾巴留几行，失败时一起抛；只给退出码等于没给信息
         timed_out = False
         try:
             for line in proc.stdout or []:
