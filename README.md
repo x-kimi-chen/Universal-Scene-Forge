@@ -26,6 +26,9 @@ python main.py
 第一次打开建议先点「依赖体检」。Python 库、FFmpeg、COLMAP、Blender 路径、训练环境它都会扫一遍，
 缺什么会告诉你缺在哪、怎么补，也能一键装。3DGS 训练环境要单独准备，见文末「训练环境」。
 
+Blender 支持 3.x–5.3。Steam 版会按 Steam 库自动探测（`steamapps/common/Blender`），
+不需要手动填路径；已在 Steam 版 5.3.0 上跑通全格式导出与再导入校验。
+
 ## 命令行
 
 ```bat

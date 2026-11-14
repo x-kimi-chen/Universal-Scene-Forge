@@ -17,7 +17,8 @@ params.json 契约:
     [USF] PROGRESS <0-100> <msg>   进度
     [USF] FILE <abs path>          产物
     [USF] DONE                      正常结束
-兼容 Blender 3.x / 4.x（导入操作符命名差异已做 shim）。
+兼容 Blender 3.x / 4.x / 5.x（含 Steam 版 5.3；导入/导出操作符与
+参数名差异均按 RNA 特性探测，不绑定单一版本）。
 """
 import json
 import math
@@ -507,11 +508,27 @@ def smart_uv(obj):
         usf_log(f"警告: {obj.name} 的 UV 仍为空, 导出可能缺少纹理坐标")
 
 
+def _ensure_node_tree(mat):
+    """确保材质有节点树。
+
+    Blender 5.3 起 use_nodes 已弃用（6.0 移除），读/写都会触发
+    DeprecationWarning；新材质默认带节点树，因此只在确实缺失时回退赋值。
+    """
+    if mat.node_tree is not None:
+        return True
+    try:
+        mat.use_nodes = True
+    except (AttributeError, TypeError):
+        return False
+    return mat.node_tree is not None
+
+
 def ensure_material(obj):
     mat = bpy.data.materials.get("USF_Material")
     if mat is None:
         mat = bpy.data.materials.new("USF_Material")
-    mat.use_nodes = True
+    if not _ensure_node_tree(mat):
+        return
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
     if bsdf is None:
@@ -519,6 +536,11 @@ def ensure_material(obj):
     # 若网格带颜色属性(顶点色) → 直连 Base Color, 保留重建外观
     color_attr = obj.data.color_attributes[0] if obj.data.color_attributes else None
     if color_attr is not None:
+        # 5.x 的 glTF 导出器按活动颜色属性写 COLOR_0, 显式设为当前绑定层
+        try:
+            obj.data.color_attributes.active_color = color_attr
+        except (AttributeError, TypeError):
+            pass
         attr = next((n for n in nodes if n.type == "ATTRIBUTE" and
                      n.attribute_name == color_attr.name), None)
         if attr is None:
@@ -696,11 +718,15 @@ def export_obj(objs, path):
     run_export("obj", objs, path, _do)
 
 
-def _gltf_vertex_color_kwarg():
+def _gltf_vertex_color_kwarg(objs=None):
     """按 Blender 版本返回顶点色导出参数。
 
-    5.x: export_vertex_color 枚举 ('MATERIAL') / 4.1+: 布尔 / 旧版: export_colors。
+    5.x: export_vertex_color 枚举; 4.1+: 布尔; 旧版: export_colors。
+    5.3 的 'MATERIAL' 只在材质真正使用顶点色时才写 COLOR_0 —— 烘焙贴图
+    接管 Base Color 后顶点色会被静默丢弃。这里改选 'ACTIVE'，与 4.x 的
+    export_colors=True 语义一致，保留网格自带的颜色属性。
     """
+    has_color = bool(objs) and any(o.data.color_attributes for o in objs)
     try:
         props = bpy.ops.export_scene.gltf.get_rna_type().properties
     except (AttributeError, RuntimeError):
@@ -708,7 +734,7 @@ def _gltf_vertex_color_kwarg():
     if "export_vertex_color" in props:
         p = props["export_vertex_color"]
         if getattr(p, "type", "") == "ENUM":
-            return {"export_vertex_color": "MATERIAL"}
+            return {"export_vertex_color": "ACTIVE" if has_color else "MATERIAL"}
         return {"export_vertex_color": True}
     if "export_colors" in props:
         return {"export_colors": True}
@@ -727,7 +753,7 @@ def export_glb(objs, path, separate=False):
         }
         if "export_tangents" in props:
             kw["export_tangents"] = True  # 法线贴图/引擎所需切线
-        kw.update(_gltf_vertex_color_kwarg())
+        kw.update(_gltf_vertex_color_kwarg(objs))
         bpy.ops.export_scene.gltf(**kw)
     run_export("gltf" if separate else "glb", objs, path, _do)
 
@@ -747,7 +773,7 @@ def export_blend(path):
 def _usd_export_kwargs(fmt="USDA"):
     """按 RNA 探测 usd_export 参数名(跨版本: 4.x/5.x 属性名有差异)。
 
-    - 顶点色: export_colors (4.x) / 5.x 可能更名;
+    - 顶点色: 4.x 叫 export_colors, 5.3 改名为 export_mesh_colors;
     - 选择集: use_selection / selected_objects_only;
     - 格式枚举: 4.x 叫 export_format, 5.x 属性名不同 —— 统一按
       "枚举项含 USDA 的属性" 定位, 值取 USDA(ASCII 可读)。
@@ -758,7 +784,11 @@ def _usd_export_kwargs(fmt="USDA"):
         return {}
     kw = {}
     # 显式导出 UV/顶点色; 不同 Blender 版本属性名不同, 按 RNA 探测。
-    for name in ("export_colors", "export_uvmaps"):
+    for name in ("export_mesh_colors", "export_colors"):
+        if name in props:
+            kw[name] = True
+            break
+    for name in ("export_uvmaps", "export_normals"):
         if name in props:
             kw[name] = True
     for name in ("use_selection", "selected_objects_only"):

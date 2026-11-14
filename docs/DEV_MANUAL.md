@@ -120,7 +120,7 @@ for %t in (tests\unit_*.py) do .venv\Scripts\python.exe %t
 
 | 工具 | 桥接 | 检测 | 状态 |
 |------|------|------|------|
-| Blender 2.8x–5.x | scripts/blender (API 分发) | 注册表/路径/Steam | ✅ 三版本实测 |
+| Blender 2.8x–5.3（含 Steam） | scripts/blender (API 分发) | 注册表/路径/Steam | ✅ 4.5 / 5.0 / 5.3-Steam 实测 |
 | Metashape 2.x | app/dcc/metashape_bridge + scripts/metashape | 路径 | ✅ 2.3.1 实测 |
 | UE5 | app/dcc/ue5_bridge + scripts/ue5 + 自动工程 | 路径 | ✅/⚠ 异步收尾 |
 | COLMAP | app/core/colmap (CUDA/CPU 双版本) | tools_root | ✅ |

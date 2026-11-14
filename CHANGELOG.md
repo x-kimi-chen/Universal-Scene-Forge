@@ -3,6 +3,28 @@
 本文件记录 Universal Scene Forge 的版本变更。格式参考 Keep a Changelog；
 版本号遵循 语义化版本（预览版以 `-preview` 后缀标识）。
 
+## 未发布
+
+### Blender 5.3 / Steam 适配
+
+- **Steam 版 Blender 5.3 实测通过**：三级探测继续自动命中
+  `steamapps/common/Blender`，全格式导出（FBX/OBJ/GLB/GLTF/BLEND/USD/USDC）
+  与再导入校验通过，无需手动填写路径。
+- **USD 顶点色参数适配 5.3**：`bpy.ops.wm.usd_export` 在 5.3 将
+  `export_colors` 改名为 `export_mesh_colors`；现按 RNA 探测两代属性名，
+  顶点色不再依赖导出器默认值。
+- **GLB 顶点色不再静默丢失**：5.x 的 `export_vertex_color='MATERIAL'` 只在
+  材质真正使用顶点色时写 `COLOR_0`，烘焙贴图接管 Base Color 后会被丢弃。
+  改为 `ACTIVE`（与 4.x `export_colors=True` 语义一致），并显式设置活动
+  颜色属性；5.3 实测 GLB 含 `POSITION/NORMAL/TEXCOORD_0/TANGENT/COLOR_0`。
+- **消除 5.3 弃用警告**：`Material.use_nodes` 在 5.3 读写都会触发
+  `DeprecationWarning`（6.0 移除）；改为仅在材质确实没有节点树时回退赋值。
+- **多版本测试脚本升级**：`tests/unit_blender_versions.py` 动态读取 Steam
+  版实际版本号，新增 GLB 属性断言，并去掉 PySide6 依赖，可在纯 CLI
+  解释器下运行。
+
+---
+
 ## 1.0 — 2026-10-24
 
 > 首个正式版。相对 0.9.9-preview，功能与九阶段流水线保持不变，主要做产品
