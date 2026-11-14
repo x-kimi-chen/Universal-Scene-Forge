@@ -28,12 +28,12 @@ VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".wmv", ".m4v",
               ".webm", ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".mts"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 
-# 媒体解析边界（SECURITY_AUDIT.md H-03）: 防畸形媒体造成内存耗尽/长时间阻塞
-MAX_IMAGE_BYTES = 64 * 1024 ** 2       # 单张图片 64 MiB
-MAX_VIDEO_BYTES = 8 * 1024 ** 3        # 单个视频 8 GiB
-MAX_IMAGE_SIDE = 16_384                # 单边最大像素
-MAX_DECODE_FRAMES = 200_000           # cv2 逐帧解码最大迭代次数
-DECODE_DEADLINE_S = 600               # 单视频解码墙钟上限
+# 媒体边界，吃过亏才加的（SECURITY_AUDIT.md H-03）
+MAX_IMAGE_BYTES = 64 * 1024 ** 2       # 图最大 64 MiB
+MAX_VIDEO_BYTES = 8 * 1024 ** 3        # 视频 8 GiB，再大基本也跑不动
+MAX_IMAGE_SIDE = 16_384                # 单边像素上限，超了解码直接 OOM
+MAX_DECODE_FRAMES = 200_000           # cv2 逐帧最多迭代这么多次
+DECODE_DEADLINE_S = 600               # 单视频解码墙钟，到点就掐
 FFMPEG_TIMEOUT_S = 600
 
 ProgressCb = Callable[[int, int, str], None]   # (done, total, msg)
@@ -51,8 +51,8 @@ class Ingester:
         self.ffmpeg = resolve_executable(ffmpeg_exe) if ffmpeg_exe else \
             resolve_executable(shutil.which("ffmpeg"))
         if not self.ffmpeg and tools_root:
-            # 与 deps.check_tools 同款三级兜底: settings → PATH → tools_root
-            # 便携版（settings 保存失败/丢失时仍能找到已装工具）
+            # 跟 deps.check_tools 一个路子：settings → PATH → tools_root
+            # 三级都留着，因为 settings 有可能写不进去，那会儿也不能装作工具没了
             from app.dcc.auto_installer import find_portable_exe
             exe = find_portable_exe("ffmpeg", Path(tools_root))
             self.ffmpeg = resolve_executable(exe)
@@ -63,7 +63,7 @@ class Ingester:
     def collect(self, source: Path) -> List[Path]:
         """统一入口：视频 → 抽帧结果；图像目录/序列 → 排序后的帧列表。"""
         if source.is_file() and source.suffix.lower() in VIDEO_EXTS:
-            raise IngestError(  # 视频需指定输出目录, 请调用 extract_frames()
+            raise IngestError(  # 视频得给输出目录，走 extract_frames() 那条
                 "视频输入请使用 extract_frames(video, out_dir)")
         if source.is_dir():
             frames = sorted(
@@ -114,7 +114,7 @@ class Ingester:
         if not uniq:
             raise IngestError("所有输入源均未产出图像帧")
         if max_frames > 0 and len(uniq) > max_frames:
-            # 图像序列同样受 max_frames 约束（防止超大目录造成内存/磁盘耗尽）
+            # 图像序列一样受 max_frames 管，几十万张的目录谁都受不了
             log.warning("输入帧 %d 超过上限 %d, 均匀截取", len(uniq), max_frames)
             step = len(uniq) / max_frames
             uniq = [uniq[int(i * step)] for i in range(max_frames)]
@@ -148,7 +148,7 @@ class Ingester:
                         max_frames: int) -> List[Path]:
         pattern = str(out_dir / "frame_%05d.jpg")
         core = ["-i", str(video), "-vf", f"fps={fps}"]
-        if max_frames > 0:                      # 0 = 不限制, 不传 -frames:v
+        if max_frames > 0:                      # 填 0 就是不限帧，那就不带 -frames:v（zan 时用不到）
             core += ["-frames:v", str(max_frames)]
         core += ["-q:v", "2", pattern]
         log.info("抽帧: %s @ %sfps (上限 %s)", video.name, fps,
@@ -174,7 +174,7 @@ class Ingester:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
-            env=scrubbed_env(),           # 剥离 PYTHONPATH/HOME, 收缩 PATH
+            env=scrubbed_env(),           # 环境瘦身：PYTHONPATH / HOME 拿掉，PATH 也收一收
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         try:
             for line in proc.stdout or []:
@@ -299,8 +299,8 @@ class Ingester:
         """
         if len(frames) < 8:
             return frames
-        # 逐帧解码 + Laplacian 属 CPU/IO 混合负载, OpenCV 解码会释放 GIL;
-        # 300 帧串行需数秒, 线程池并行后中位数与阈值完全不变。
+        # 解码加 Laplacian 是 CPU/IO 混着跑，好在 cv2 解码时会放 GIL
+        # 所以线程池是真有用：300 帧串行好几秒，并行完了中位数和阈值一个没变
         with ThreadPoolExecutor(max_workers=8) as pool:
             vals = list(pool.map(self._blur_score, frames))
         ordered = sorted(vals)
@@ -318,14 +318,14 @@ class Ingester:
         """CPU 并行预处理：长边>max_side 的帧降采样（省 SfM/训练显存）。"""
         def _shrink(path: Path) -> Path:
             try:
-                import cv2  # 延迟导入，缺库时仅跳过预处理
+                import cv2  # 放到函数里 import，缺库就只跳过预处理这一步
             except ImportError:
                 return path
             try:
                 if path.stat().st_size > MAX_IMAGE_BYTES:
                     log.warning("图片超过大小上限, 跳过预处理: %s", path)
                     return path
-                # 超大图用 1/2 解码, 控制峰值内存（最终长边 ≤ max_side）
+                # 大图先按 1/2 解，压住峰值内存；反正最后长边也就缩到 max_side
                 img = cv2.imread(str(path), cv2.IMREAD_REDUCED_COLOR_2)
             except Exception as exc:  # noqa: BLE001
                 log.warning("图片解码失败, 跳过预处理: %s (%s)", path, exc)

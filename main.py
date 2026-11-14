@@ -57,7 +57,7 @@ def _run_check_deps() -> int:
     report = deps.full_report(PipelineSettings.load())
     print(f"\n=== {APP_NAME} 依赖体检 ===")
     for d in report:
-        mark = "[OK]" if d.ok else "[X]"     # ASCII 标记, GBK 控制台安全
+        mark = "[OK]" if d.ok else "[X]"     # 用 ASCII 打标记，GBK 控制台也不会崩
         print(f"  {mark} {d.kind:<7} {d.name:<16} {d.detail}"
               + (f"  → {d.fix_hint}" if not d.ok else ""))
     info = gpu.probe()
@@ -69,7 +69,7 @@ def _run_cli(sources: list, output: Path, model: Path = None,
              accept_3dgs: bool = False, commercial: bool = False) -> int:
     """CLI 模式。退出码语义(C-04): 0=全部成功, 1=任意阶段失败,
     3=输入源/环境阻断(未进入流水线)。参数错误由 argparse 侧返回 2。"""
-    # C-03/M-01: 输入/输出统一规范化 + 输出根边界校验, 失败即环境阻断(3)
+    # C-03/M-01：输入输出先规范化，再查输出根边界；过不了就当环境问题，退出码 3
     from app.utils.security import (PathSecurityError, ensure_output_dir,
                                     normalize_input)
     try:
@@ -83,20 +83,20 @@ def _run_cli(sources: list, output: Path, model: Path = None,
         log.error("[SECURITY] CLI 路径预检失败: %s", exc)
         return 3
 
-    from PySide6.QtCore import QCoreApplication  # EventBus 依赖 Qt 事件循环
+    from PySide6.QtCore import QCoreApplication  # EventBus 得有 Qt 的事件循环才转得起来
     from app.controllers.pipeline_controller import EventBus, PipelineController
     from app.models.settings import PipelineSettings
 
     app = QCoreApplication([])
     bus = EventBus()
-    # M-01: 文件日志经 RedactionFilter 脱敏, 控制台 print 是另一条通道, 必须
-    # 同样调用 redact(); 否则子进程 stderr 尾部等消息会原样带出用户名路径。
+    # M-01：文件日志走 RedactionFilter，print 是另一个通道
+    # 这里也得调 redact()，不然子进程 stderr 的尾巴会把用户名路径原样带出来
     bus.log_line.connect(lambda lvl, msg: print(f"[{lvl}] {redact(msg)}"))
     bus.progress.connect(lambda p, m: print(redact(f"  {p:3d}% {m}"), flush=True))
     bus.finished.connect(lambda ok, msg: print(redact(f"\n=== {msg} ===")))
 
     settings = PipelineSettings.load()
-    # 3.1: CLI 的许可证选择必须落盘并写审计日志（不可静默放行）
+    # 3.1：命令行选了什么要落盘、要进审计日志，不能悄悄放行
     if commercial:
         settings.commercial_use = True
         log.info("[LICENSE] CLI 声明商业用途: 3DGS 将被拒绝执行")
@@ -139,7 +139,7 @@ def _preload_open3d() -> None:
     try:
         import open3d  # noqa: F401
     except Exception as exc:  # noqa: BLE001 —— 缺失/异常交由依赖体检与各阶段兜底
-        # 记录根因: 冻结环境常见 DLL 初始化失败, 只写"未安装"会掩盖真实原因。
+        # 把根因带上。打包环境最常见的是 DLL 初始化失败，只写"未安装"等于把线索丢了
         log.warning("open3d 预载失败: %s", exc)
 
 
@@ -147,12 +147,12 @@ def main() -> int:
     """进程入口：解析参数后分派到 GUI、命令行或依赖体检三条路径，返回退出码。"""
     setup_logging()
     from app.utils.paths import register_external_pkgs
-    register_external_pkgs()   # 冻结壳 python_pkgs 补装目录（依赖体检一键安装的落地处）
+    register_external_pkgs()   # 冻结包里额外装库的目录，一键安装就落在这儿
     _preload_open3d()
     _reconfigure_stdio()
     args = _parse_args()
     if args.check_deps or args.cli:
-        # 打包版为窗口子系统程序, 没有控制台时 print 无处可写（旧版静默退出）。
+        # 打包版是窗口子系统，没有控制台，print 没地方去，旧版就这么默默退了
         from app.utils.console import ensure_console, notify_output_saved
         fallback = ensure_console()
         try:
@@ -175,6 +175,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        # Ctrl+C 属于用户主动中止: 返回 130, 与阶段失败(1)区分, 便于脚本判断。
+        # Ctrl+C 是用户自己要停，返回 130，跟阶段失败（1）分开，脚本好判断
         print("\n已中断")
         sys.exit(130)

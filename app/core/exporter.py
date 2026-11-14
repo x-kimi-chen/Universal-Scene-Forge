@@ -45,7 +45,7 @@ class ExportDispatcher:
                    lod_ratios: Optional[List[float]] = None,
                    bake_ao: bool = False,
                    texture_size: int = 4096) -> Dict[str, List[Path]]:
-        # M-02: 输出目录边界校验（拒绝盘符根/系统目录, 探测可写性）
+        # 输出目录先把边界卡住（M-02）：盘符根、系统目录一律不认，再探一下能不能写
         """按 formats 逐个尝试导出，返回「格式 → 产物路径列表」；某一路失败不中断其余格式。"""
         from app.utils.security import ensure_output_dir
         out_dir = ensure_output_dir(out_dir)
@@ -53,8 +53,8 @@ class ExportDispatcher:
         results: Dict[str, List[Path]] = {}
 
         want = {f.lower() for f in formats}
-        # OBJ 也交给 Blender（4.0+ bpy.ops.wm.obj_export）, 仅在 Blender 缺席/
-        # 失败时降级 Open3D 直写。
+        # OBJ 默认也丢给 Blender，4.0 之后有 bpy.ops.wm.obj_export
+        # 只有 Blender 不在、或者导失败，才 fallback 到 Open3D 直写
         blender_formats = want & {"fbx", "glb", "gltf", "blend", "usd", "obj"}
         direct_formats = want - blender_formats - {"uasset"}
 
@@ -66,8 +66,8 @@ class ExportDispatcher:
                     lod_ratios=lod_ratios, bake_ao=bake_ao,
                     texture_size=texture_size)
                 for fmt in blender_formats:
-                    # USD 导出器按场景内容可能产出 .usda/.usdc/.usd,
-                    # 三者同属 usd 格式; 只按 fmt 字面匹配会误报"未产出"。
+                    # USD 这个格式有点绕，导出器看场景给 .usda / .usdc / .usd
+                    # 光拿 fmt 字面去比，会冤枉它说"未产出"
                     exts = {"usd": {"usd", "usda", "usdc"}}.get(
                         fmt, {fmt})
                     results[fmt] = [
@@ -76,7 +76,7 @@ class ExportDispatcher:
             except Exception as exc:  # noqa: BLE001 容错: Blender 缺席/失败降级
                 log.error("Blender 导出失败, 降级: %s", exc)
 
-        # OBJ 降级: Blender 未产出时用 Open3D 直写（可用性优先, 风险最低）
+        # OBJ 兜底：Blender 没给就用 Open3D 直接写，先保证有东西，别追求完美
         if "obj" in want and not results.get("obj"):
             try:
                 results["obj"] = self._export_obj_lods(
@@ -88,7 +88,7 @@ class ExportDispatcher:
         for fmt in direct_formats:
             log.warning("暂不支持直写格式: %s", fmt)
 
-        # FBX 降级链: Blender 缺席/失败 → 3ds Max → Maya → Houdini → C4D
+        # FBX 这条链是排好队的：Blender 不行就 Max，再 Maya、Houdini、C4D，谁先成算谁的
         if "fbx" in want and not results.get("fbx"):
             fbx_out = out_dir / f"{base_name}.fbx"
             chain = [
@@ -124,7 +124,7 @@ class ExportDispatcher:
             log.warning("uasset 需要 UE5: 在「调用路径设置」中配置引擎与 .uproject "
                         "工程后重试, 其余格式不受影响")
 
-        # 产物校验（L-02）: 过滤不存在/零字节文件, 避免"日志成功但产物为空"
+        # 产物要过一遍（L-02）：不存在或者 0 字节都不算，免得日志写着成功、目录里空着
         for fmt, files in list(results.items()):
             good: List[Path] = []
             for f in files:
@@ -160,7 +160,7 @@ class ExportDispatcher:
         import shutil as _sh
         outputs: List[Path] = [out_dir / f"{base_name}.obj"]
         _sh.copy2(mesh_obj, outputs[0])
-        # 材质随行(完整性): 只拷 .obj 会丢 mtl/纹理 → 模型"能开但没材质"。
+        # 材质得跟着走：只拷 .obj 的话 mtl 和贴图全丢，打开就是白模
         mtl = mesh_obj.with_suffix(".mtl")
         if mtl.exists():
             _sh.copy2(mtl, out_dir / f"{base_name}.mtl")
@@ -178,7 +178,7 @@ class ExportDispatcher:
                 mesh = o3d.io.read_triangle_mesh(str(mesh_obj))
                 total = len(mesh.triangles)
                 for i, ratio in enumerate(lod_ratios[1:], start=1):
-                    # 小网格不能用 1000 面下限, 否则 LOD 不会真正减面。
+                    # 小网格不能套 1000 面那个下限，套了就根本减不掉，LOD 等于没做
                     target = max(1, min(total - 1, int(total * ratio)))
                     lod = mesh.simplify_quadric_decimation(target)
                     lod.compute_vertex_normals()

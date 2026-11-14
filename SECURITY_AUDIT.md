@@ -399,9 +399,11 @@ env = {k: v for k, v in os.environ.items()
 
 `app/dcc/c4d_bridge.py:180`、`houdini_bridge.py:171`、`max_bridge.py:202`、`metashape_bridge.py:130`、`ue5_bridge.py:168` 使用 `subprocess.run(["taskkill", ...])`；对照 `blender_bridge.py:200` 已用 `system_tool("taskkill.exe")`（`security.py:179-183`，固定 `%SystemRoot%\System32`）。本地攻击者若能写 PATH 目录，可能劫持 `taskkill`。改法同 `blender_bridge.py:200`，逐处替换。
 
-### L-02（低）Blender 6.0 兼容
+### L-02（低）Blender 6.0 兼容 —— 已修复
 
-`scripts/blender/mesh_to_fbx.py:283` 的 `mat.use_nodes = True` 在 Blender 5.2 已报 `DeprecationWarning`（实跑日志 `build/audit/runs/run3/harness.log:17-18`）。建议按版本分支：`mat.use_nodes = True`（≤5.x） / 新 API（6.0+）。
+`scripts/blender/mesh_to_fbx.py` 原先直接读写 `mat.use_nodes`，Blender 5.3 已将其标记为
+弃用（6.0 移除）并输出 `DeprecationWarning`。现改为 `_ensure_node_tree()`：仅在材质确实
+没有节点树时才回退赋值，5.3 下不再触发警告。Steam 5.3.0 实跑日志已无该警告。
 
 ### L-03（低）非流形网格仅告警
 

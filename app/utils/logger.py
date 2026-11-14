@@ -18,11 +18,11 @@ _FORMAT = "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s"
 _DATEFMT = "%H:%M:%S"
 
 # --------------------------------------------------------------------- #
-#  日志脱敏（SECURITY_AUDIT.md L-01）
-#  - API key / token / password / Authorization 头;
-#  - 用户名绝对路径（Windows C:\Users\<name>, POSIX /home|/Users/<name>）;
-#  - 常见密钥前缀（sk-, hf_, ghp_）。
-# 脱敏在 Handler 层执行, 控制台/GUI/文件三通道一致。
+#  日志脱敏（SECURITY_AUDIT.md L-01），要遮的就三类
+#  API key / token / password / Authorization 头
+#  带用户名的绝对路径（C:\Users\<name>、/home/<name> 这种）
+#  还有 sk-、hf_、ghp_ 开头的密钥串
+#  遮在 Handler 层做，控制台、界面、文件三个口子口径一致
 # --------------------------------------------------------------------- #
 _SECRET_KV = re.compile(
     r"(?i)\b(api[_-]?key|apikey|access[_-]?key|secret|token|password|passwd|"
@@ -53,7 +53,7 @@ class RedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             message = record.getMessage()
-        except Exception:  # 格式化失败时保持原样, 不影响日志通道
+        except Exception:  # 格式化挂了就原样输出，别把日志通道带崩
             return True
         cleaned = redact(message)
         if cleaned != message:
@@ -84,7 +84,7 @@ class QtLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             self.sink(record.levelname, self.format(record))
-        except Exception:  # 日志通道自身绝不能反噬主流程
+        except Exception:  # 记日志这件事本身不能把主流程搞挂，这条优先级最高
             pass
 
 
@@ -92,17 +92,17 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     root = logging.getLogger()
     root.setLevel(level)
     if not root.handlers:
-        # 绑 stdout(P5): logging 默认走 stderr, PowerShell 会把整行渲染成
-        # 红色 NativeCommandError, 观感等同报错。CLI 的 print/日志同流后
-        # 也可正确排序。无控制台的 windowed exe 下 sys.stdout 为 None,
-        # StreamHandler(None) 自动回退 sys.stderr, 行为不变。
+        # 把日志绑到 stdout（P5）。logging 默认写 stderr，PowerShell 一看就整行标红
+        # 报 NativeCommandError，用户以为程序炸了。跟 print 同流，顺序也顺了
+        # 窗口版 exe 没有控制台，sys.stdout 是 None，这时 StreamHandler(None)
+        # 自己会退回 stderr，行为不变
         console = logging.StreamHandler(sys.stdout)
         console.setFormatter(logging.Formatter(_FORMAT, _DATEFMT))
         console.addFilter(RedactionFilter())
         root.addHandler(console)
-        try:   # 文件通道失败(只读盘/权限)不应拖垮启动
+        try:   # 文件通道万一写不了（只读盘、没权限），也不能拖垮启动
             logfile = _log_file_path()
-            # utf-8-sig 写 BOM: 记事本/Excel 按 ANSI 猜编码时不再乱码(BUG-008)
+            # 用 utf-8-sig 带 BOM，记事本和 Excel 就不会按 ANSI 猜，中文不再乱码（BUG-008）
             fileh = logging.FileHandler(logfile, encoding="utf-8-sig")
             fileh.setFormatter(logging.Formatter(_FORMAT, _DATEFMT))
             fileh.addFilter(RedactionFilter())

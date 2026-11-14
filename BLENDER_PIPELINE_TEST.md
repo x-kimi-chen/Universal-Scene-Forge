@@ -541,3 +541,71 @@ POSITION, NORMAL, TEXCOORD_0, TANGENT
    体积时使用 LOD1/LOD2 或降低 `texture_size`。
 4. **环境依赖**：TSDF 需要用户本地 Inria 仓库与训练 venv；缺失时自动
    回退泊松重建（合规隔离不变）。
+
+---
+
+## 10. Steam 版 Blender 5.3 适配复测（2026-11-14）
+
+### 10.1 测试环境
+
+```
+$ & 'D:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' --version
+Blender 5.3.0
+    build date: 2026-11-10
+    build time: 01:33:43
+    build commit date: 2026-11-09
+```
+
+- 调用方式不变：`blender --background --factory-startup --python mesh_to_fbx.py -- params.json`
+- 三级探测结果：`source=steam`，无需在 `settings.json` 填 `blender_exe` 也能命中。
+- 测试解释器：Python 3.12（PySide6 6.12），Blender 进程独立运行。
+
+### 10.2 全格式矩阵
+
+夹具：`build/audit/fixtures/`（sphere.obj / sphere_zero_uv.obj /
+sphere_multi_uv.fbx / points_only.ply），输出目录 `build/usf_53_test/matrix/`。
+
+| 用例 | 请求格式 | LOD | 结果 |
+|---|---|---|---|
+| all_formats | fbx,obj,glb,gltf,blend,usd,usdc | 1.0/0.5/0.25 | 19 个产物，再导入 **19/19 OK** |
+| zero_uv | obj,glb,blend | 1.0 | 3 个产物，**3/3 OK**（UV 自动重建） |
+| multi_uv | obj,glb,blend | 1.0 | 3 个产物，**3/3 OK**（保留单套 UVMap） |
+| points_only | fbx | 1.0 | 退出码 **1**（0 面网格按设计给出可读错误） |
+| usd_in | obj,glb,blend | 1.0 | USD 输入回环，**3/3 OK** |
+| glb_in | obj,glb,blend | 1.0 | GLB 输入回环，**3/3 OK** |
+| fbx_in | obj,glb,blend | 1.0 | FBX 输入回环，**3/3 OK** |
+
+再导入校验使用独立 Blender 进程（`build/usf_53_test/validate_imports.py`），
+逐文件检查对象数、顶点/面数、UV 层与颜色属性，全部通过。
+
+### 10.3 多版本桥接测试
+
+```powershell
+python tests\unit_blender_versions.py
+```
+
+```
+[4.5] SKIP (not installed)
+[5.0] SKIP (not installed)
+[5.3-Steam] -> PASS (7 files, glb=['COLOR_0', 'NORMAL', 'POSITION', 'TANGENT', 'TEXCOORD_0'])
+BLENDER-VERSIONS: {"5.3-Steam": "PASS"}
+```
+
+测试脚本已改为从 Steam 探测结果动态读取版本号，不再硬编码 `5.2` 标签。
+
+### 10.4 本轮适配项
+
+| 问题 | 5.3 表现 | 修复 |
+|---|---|---|
+| USD 顶点色参数改名 | `export_colors` 不存在，改为 `export_mesh_colors` | `_usd_export_kwargs` 按 RNA 探测两代属性名 |
+| GLB 顶点色被静默丢弃 | 烘焙贴图接管 Base Color 后 `'MATERIAL'` 不写 `COLOR_0` | 改用 `'ACTIVE'` 并显式设置活动颜色属性 |
+| `Material.use_nodes` 弃用 | 读/写均触发 `DeprecationWarning`（6.0 移除） | 新增 `_ensure_node_tree()`，已有节点树时不触碰该属性 |
+| 测试脚本无法脱离 GUI | `unit_blender_versions.py` 导入 PySide6 | 去掉 Qt 依赖，新增 GLB 属性断言 |
+
+### 10.5 已知限制
+
+1. `.blend` 保存时 Blender 会尝试写 `C:\Users\<user>\.thumbnails\...` 预览图；
+   沙箱/权限受限时该行报错但不影响 `.blend` 产物本身（历史问题，5.3 仍存在）。
+2. 4.5 / 5.0 未安装在当前机器，测试脚本按设计 SKIP；5.3 适配不依赖这两个版本。
+3. 本轮未重新构建 EXE 安装包；`scripts/blender/mesh_to_fbx.py` 由 spec 直接
+   收集，重新打包即可带入。
