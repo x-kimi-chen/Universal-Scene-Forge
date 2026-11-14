@@ -3,17 +3,17 @@
 把一段视频或一批照片，做成能直接进 DCC 的模型。这个工具把散落在 COLMAP、3DGS 训练脚本、
 Blender、Metashape 之间的手工步骤串成一条流水线，中间不用你来回切窗口、手动改配置。
 
-当前版本 **1.0**，九段流程：抽帧 → SfM 求位姿 → 3DGS 训练 → TSDF 建网格 → 影像投影贴色 →
+当前版本 **1.1**，九段流程：抽帧 → SfM 求位姿 → 3DGS 训练 → TSDF 建网格 → 影像投影贴色 →
 展 UV 或 UE5 预览（可选）→ Blender 后处理 → Metashape 修补（可选）→ 导出
 FBX / OBJ / GLB / BLEND / USD / UASSET。每段都能单独失败，失败点不影响后面的降级链——
 训练环境没装就走泊松，UE5 没装就跳过预览，最后至少给你一个能打开的模型。
 
-[更新日志](CHANGELOG.md) ｜ [1.0 发布说明](RELEASE_NOTES_1.0.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
+[更新日志](CHANGELOG.md) ｜ [开发手册](docs/DEV_MANUAL.md) ｜ [1.0 发布说明](RELEASE_NOTES_1.0.md) ｜ [安全审计](SECURITY_AUDIT.md) ｜ [第三方许可](THIRD_PARTY_LICENSES.md)
 
 ## 跑起来
 
-装包最快。到 GitHub Releases 下 `UniversalSceneForge_1.0_Setup.exe`，装完直接开。
-不想装就用绿色版 `UniversalSceneForge_1.0_portable.zip`，解压运行 `UniversalSceneForge.exe`。
+装包最快。到 GitHub Releases 下 `UniversalSceneForge_1.1_Setup.exe`，装完直接开。
+不想装就用绿色版 `UniversalSceneForge_1.1_portable.zip`，解压运行 `UniversalSceneForge.exe`。
 下载完可以拿 `installer/SHA256SUMS.txt` 对一下哈希。
 
 从源码跑也行：

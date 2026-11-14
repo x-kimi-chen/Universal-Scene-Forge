@@ -9,13 +9,13 @@ SetCompressor /SOLID lzma   ; 固体 LZMA 压缩: 单文件安装包体积最优
 
 !define APPNAME     "Universal Scene Forge"
 !define DISPLAYNAME "通用场景锻造系统"
-!define APPVERSION  "1.0"
+!define APPVERSION  "1.1"
 !define COMPANY     "USF Project"
 !define APPID       "{8F4B2C1D-9A7E-4D3F-B5C6-1E2A3B4C5D6E}"
 !define DISTDIR     "..\dist\UniversalSceneForge"
 
 Name "${DISPLAYNAME} ${APPVERSION}"
-OutFile "UniversalSceneForge_1.0_Setup.exe"
+OutFile "UniversalSceneForge_1.1_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APPNAME}"
 InstallDirRegKey HKLM "Software\${APPNAME}" "InstallDir"
 RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注册表
@@ -42,12 +42,12 @@ RequestExecutionLevel admin              ; 需管理员: 写 Program Files + 注
 !insertmacro MUI_LANGUAGE "English"
 
 ; ---- 版本信息 ----
-VIProductVersion "1.0.0.0"
+VIProductVersion "1.1.0.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${DISPLAYNAME}"
 VIAddVersionKey /LANG=2052 "FileDescription" "3DGS 场景重建与 DCC 自动化导出工具"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "${COMPANY}"
-VIAddVersionKey /LANG=2052 "FileVersion" "1.0"
-VIAddVersionKey /LANG=2052 "ProductVersion" "1.0"
+VIAddVersionKey /LANG=2052 "FileVersion" "1.1"
+VIAddVersionKey /LANG=2052 "ProductVersion" "1.1"
 
 Section "主程序" SecMain
     SectionIn RO

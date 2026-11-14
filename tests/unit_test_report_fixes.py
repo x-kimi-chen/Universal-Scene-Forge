@@ -287,10 +287,13 @@ check("E6", "EXTENSIONS 注册表含 pr_cep (Premiere CEP 面板)",
       [e.key for e in em.EXTENSIONS] == ["pr_cep"])
 
 # --------------------------------------------------------------- #
-# V) 手册与版本 0.9.4 同步
+# V) 手册与当前版本同步
 # --------------------------------------------------------------- #
 _manual = (ROOT / "docs" / "user_manual.html").read_text(encoding="utf-8")
-check("V1", "手册版本标识 v0.9.4", "用户手册 v0.9.4" in _manual)
+from app import __version__ as _app_version  # noqa: E402
+_manual_ver = "V" + ".".join(_app_version.split("-")[0].split(".")[:2])
+check("V1", f"手册版本标识 {_manual_ver}",
+      f"用户手册 {_manual_ver}" in _manual, _manual_ver)
 check("V2", "手册 0.9.3 仅存历史标注(v0.9.3 起)",
       _manual.count("0.9.3") == 1 and "v0.9.3 起" in _manual,
       f"count={_manual.count('0.9.3')}")

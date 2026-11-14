@@ -259,8 +259,8 @@ _ver = app_mod.__version__
 _base = _ver.split("-")[0]           # "0.9.5-preview" -> "0.9.5"
 _parts = tuple(int(x) for x in _base.split("."))
 
-check("D02a", "版本号存在且符合 x.y.z(-后缀)格式",
-      len(_parts) == 3 and all(p >= 0 for p in _parts), _ver)
+check("D02a", "版本号存在且符合 x.y[.z](-后缀)格式",
+      len(_parts) in (2, 3) and all(p >= 0 for p in _parts), _ver)
 _vfile_txt = (ROOT / "installer" / "version_info.txt").read_text(
     encoding="utf-8")
 check("D02b", "PyInstaller version 资源与 app 版本一致",
@@ -270,7 +270,7 @@ _spec = (ROOT / "installer" / "UniversalSceneForge.spec").read_text(
     encoding="utf-8")
 check("D02c", "spec 挂接 version 资源(--version-file)", "version_info.txt" in _spec)
 _nsi = (ROOT / "installer" / "usf_setup.nsi").read_text(encoding="utf-8-sig")
-_vi = ".".join(str(p) for p in _parts) + ".0"
+_vi = ".".join(str(p) for p in (_parts + (0, 0))[:3]) + ".0"
 check("D02d", "NSIS 版本同步(app 版本 + VIProductVersion)",
       _base in _nsi and _vi in _nsi)
 check("D02e", "NSIS 写入卸载注册表 InstallLocation(C-01)", "InstallLocation" in _nsi)

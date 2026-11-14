@@ -3,7 +3,14 @@
 本文件记录 Universal Scene Forge 的版本变更。格式参考 Keep a Changelog；
 版本号遵循 语义化版本（预览版以 `-preview` 后缀标识）。
 
-## 未发布
+## 1.1 — 2026-11-14
+
+### 版本与文档
+
+- 版本号由 1.0 升级为 **1.1**；同步 `installer/version_info.txt`、NSIS 安装脚本、
+  README、用户手册与开发手册。
+- 开发手册升级为 1.1 版：`docs/DEV_MANUAL.md`，覆盖目录结构、九阶段流水线、
+  事件总线、DCC 桥接规范、Blender 5.3 适配、测试体系、打包发布与故障排查。
 
 ### Blender 5.3 / Steam 适配
 
